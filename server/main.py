@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse
 from server.config import init_config
 from server.logging_config import setup_logging
 from server.models import ChatRequest, ChatResponse, RateRequest
+from server.tracing import TraceMiddleware, get_metrics_response
 from server.agent import (
     process_message, get_session, get_all_sessions, rate_session,
 )
@@ -51,6 +52,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="小智 AI 智能客服", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(TraceMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -133,6 +136,12 @@ async def list_tickets():
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus 兼容的指标端点（需求 2.3）"""
+    return get_metrics_response()
 
 
 # ── WebSocket 实时通信 ────────────────────────────────

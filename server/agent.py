@@ -37,6 +37,7 @@ from server.models import (
     Sentiment, IntentCategory, SessionStatus,
 )
 from server.tools import ALL_TOOLS
+from server.tracing import TOOL_CALLS, timed_node
 
 logger = logging.getLogger("agent")
 
@@ -172,8 +173,8 @@ class AgentState(TypedDict):
 _supervisor_llm = _make_llm(temperature=0.0, max_tokens=60)
 
 
+@timed_node("supervisor")
 def supervisor_node(state: AgentState) -> dict[str, Any]:
-    """路由 + 情绪/意图分析"""
     node_start = time.time()
     logger.info("node_enter", extra={"extra_fields": {"node": "supervisor", "event": "enter"}})
 
@@ -256,6 +257,7 @@ def _ensure_worker():
         _tool_executor = ToolNode(ALL_TOOLS)
 
 
+@timed_node("worker")
 def worker_node(state: AgentState) -> dict[str, Any]:
     _ensure_worker()
     node_start = time.time()
@@ -278,6 +280,7 @@ def worker_should_tool(state: AgentState) -> Literal["tool_node", "worker_done"]
     return "worker_done"
 
 
+@timed_node("tool")
 def tool_node(state: AgentState) -> dict[str, Any]:
     _ensure_worker()
     node_start = time.time()
@@ -289,8 +292,10 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     new_refs: list[str] = []
     if isinstance(last_ai, AIMessage) and last_ai.tool_calls:
         for tc in last_ai.tool_calls:
-            new_tools.append(tc["name"])
-            if tc["name"] == "search_knowledge_tool":
+            tool_name = tc["name"]
+            new_tools.append(tool_name)
+            TOOL_CALLS.labels(tool_name=tool_name, status="ok").inc()
+            if tool_name == "search_knowledge_tool":
                 new_refs.append(tc["args"].get("query", ""))
 
     duration_ms = int((time.time() - node_start) * 1000)
@@ -317,6 +322,7 @@ def worker_done(state: AgentState) -> dict[str, Any]:
 _reviewer_llm = _make_llm(temperature=0.3, max_tokens=2048)
 
 
+@timed_node("reviewer")
 def reviewer_node(state: AgentState) -> dict[str, Any]:
     node_start = time.time()
     logger.info("node_enter", extra={"extra_fields": {"node": "reviewer", "event": "enter"}})

@@ -50,17 +50,17 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - **Property 2: Exception log structure** — exception entries contain type, stack_summary
     - **Validates: Requirements 1.1, 1.3**
 
-- [ ] 3. Implement tracing and Prometheus metrics (`server/tracing.py`)
-  - [ ] 3.1 Create `server/tracing.py` with trace middleware and Prometheus metrics
+- [x] 3. Implement tracing and Prometheus metrics (`server/tracing.py`)
+  - [x] 3.1 Create `server/tracing.py` with trace middleware and Prometheus metrics
     - Implement `trace_middleware` that generates trace_id, sets contextvars, adds X-Trace-ID response header
     - Define Prometheus metrics: REQUEST_COUNT, REQUEST_LATENCY, ACTIVE_SESSIONS, TOOL_CALLS, NODE_DURATION
     - Implement `timed_node` decorator for wrapping agent graph nodes with timing
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 3.2 Register trace middleware in `server/main.py` and add `/metrics` endpoint
+  - [x] 3.2 Register trace middleware in `server/main.py` and add `/metrics` endpoint
     - _Requirements: 2.3_
 
-  - [ ] 3.3 Apply `timed_node` decorator to supervisor_node, worker_node, tool_node, reviewer_node in `server/agent.py`
+  - [x] 3.3 Apply `timed_node` decorator to supervisor_node, worker_node, tool_node, reviewer_node in `server/agent.py`
     - Record tool name, input summary, duration, and status for each tool call
     - _Requirements: 2.2, 2.4_
 
