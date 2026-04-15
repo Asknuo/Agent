@@ -1,0 +1,62 @@
+# ============================================================
+# 小智 AI 智能客服 — 集中式配置文件
+# 所有值均可通过同名环境变量覆盖（优先级：环境变量 > 本文件）
+# ============================================================
+
+# ── LLM 配置 ─────────────────────────────────────────
+# openai_api_key: ""          # 必填，或通过 OPENAI_API_KEY 环境变量设置
+# openai_base_url: null       # 可选，自定义 API 端点（如豆包 ARK）
+openai_model: "gpt-4o-mini"
+embedding_model: "text-embedding-3-small"
+
+# ── 日志 ─────────────────────────────────────────────
+log_level: "INFO"             # DEBUG | INFO | WARNING | ERROR
+# log_file: null              # 可选，日志文件路径
+
+# ── 认证（JWT）────────────────────────────────────────
+# jwt_secret: ""              # 启用认证时必填
+jwt_issuer: "xiaozhi"
+auth_enabled: false           # 开发环境默认关闭
+
+# ── 速率限制 ─────────────────────────────────────────
+rate_limit_rpm: 30            # 每分钟最大请求数
+rate_limit_enabled: true
+
+# ── 缓存 ─────────────────────────────────────────────
+cache_ttl: 300                # 缓存过期时间（秒）
+cache_max_size: 1000          # LRU 缓存最大条目数
+
+# ── 并发控制 ─────────────────────────────────────────
+max_concurrent_requests: 20   # 最大并发 Agent 请求数
+request_timeout: 120          # 单次请求超时（秒）
+max_queue_size: 50            # 等待队列最大长度
+
+# ── 数据库 ───────────────────────────────────────────
+# db_url: ""                  # PostgreSQL 连接串，或通过 DB_URL 环境变量设置
+# db_allowed_tables: []       # 限定可查询的表，空则允许所有
+db_readonly: true
+sql_max_rows: 50              # 查询结果行数上限
+sql_max_subquery_depth: 2     # 子查询最大嵌套层数
+
+# ── Embedding 批处理 ─────────────────────────────────
+embedding_batch_size: 32      # 每批文档数
+embedding_batch_delay_ms: 100 # 批间延迟（毫秒）
+
+# ── 熔断器 ───────────────────────────────────────────
+circuit_breaker_threshold: 5  # 连续失败次数触发熔断
+circuit_breaker_recovery_s: 60 # 熔断恢复探测间隔（秒）
+
+# ── 重试 ─────────────────────────────────────────────
+retry_max_attempts: 3         # 最大重试次数
+retry_base_delay: 1.0         # 基础延迟（秒），指数退避
+
+# ── 多租户 ───────────────────────────────────────────
+default_tenant_id: "default"
+
+# ── 外部 RAG API（可选）──────────────────────────────
+# rag_api_url: ""
+# rag_api_key: ""
+# rag_query_field: "query"
+# rag_response_path: "data"
+# rag_content_field: "content"
+# rag_title_field: "title"

@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env
+.env
+
+# IDE
+.vscode/
+
+# Logs / runtime
+*.log
+
+# 可选（如果是运行时生成）
+data/
