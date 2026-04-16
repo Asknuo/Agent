@@ -13,11 +13,13 @@ load_dotenv()
 
 import logging
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from jose import JWTError
 
-from server.config import init_config
+from server.auth import AuthMiddleware, verify_ws_token
+from server.config import get_config, init_config
 from server.logging_config import setup_logging
 from server.models import ChatRequest, ChatResponse, RateRequest
 from server.tracing import TraceMiddleware, get_metrics_response
@@ -53,7 +55,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="小智 AI 智能客服", version="1.0.0", lifespan=lifespan)
 
+# Middleware execution order (outermost → innermost):
+#   CORS → Auth → Trace → ... → route handler
+# Starlette processes in reverse registration order, so register innermost first.
+
 app.add_middleware(TraceMiddleware)
+
+_cfg = get_config()
+app.add_middleware(
+    AuthMiddleware,
+    secret_key=_cfg.jwt_secret,
+    issuer=_cfg.jwt_issuer,
+    enabled=_cfg.auth_enabled,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -147,9 +161,24 @@ async def metrics():
 # ── WebSocket 实时通信 ────────────────────────────────
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
+async def websocket_endpoint(ws: WebSocket, token: str = Query(default="")):
+    # WebSocket token verification (Requirement 4.4)
+    config = get_config()
     client_id = uuid.uuid4().hex[:8]
+
+    if config.auth_enabled:
+        if not token:
+            await ws.close(code=1008, reason="Missing authentication token")
+            return
+        try:
+            payload = verify_ws_token(token, config.jwt_secret, config.jwt_issuer)
+            client_id = payload.get("sub", client_id)
+        except JWTError as exc:
+            logger.warning("ws_auth_failed", extra={"extra_fields": {"error": str(exc)}})
+            await ws.close(code=1008, reason="Invalid or expired token")
+            return
+
+    await ws.accept()
     logger.info("ws_client_connected", extra={"extra_fields": {"client_id": client_id}})
 
     try:

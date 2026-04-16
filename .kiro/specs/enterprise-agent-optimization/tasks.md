@@ -64,16 +64,16 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Record tool name, input summary, duration, and status for each tool call
     - _Requirements: 2.2, 2.4_
 
-  - [ ]* 3.4 Write unit tests for trace middleware and metrics recording
+  - [x] 3.4 Write unit tests for trace middleware and metrics recording
     - Test trace_id generation and propagation
     - Test Prometheus metric increments
     - _Requirements: 2.1, 2.3_
 
-- [ ] 4. Checkpoint — Ensure all tests pass
+- [x] 4. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement JWT authentication (`server/auth.py`)
-  - [ ] 5.1 Create `server/auth.py` with `AuthMiddleware` class
+- [x] 5. Implement JWT authentication (`server/auth.py`)
+  - [x] 5.1 Create `server/auth.py` with `AuthMiddleware` class
     - Implement Bearer token extraction and JWT decode with `python-jose`
     - Verify signature, expiration, and issuer fields
     - Exclude paths: /api/health, /metrics, /docs, /openapi.json
@@ -82,12 +82,12 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Log WARNING on auth failures
     - _Requirements: 4.1, 4.2, 4.3, 4.5_
 
-  - [ ] 5.2 Add WebSocket token verification in `server/main.py`
+  - [x] 5.2 Add WebSocket token verification in `server/main.py`
     - Accept token via query parameter on /ws endpoint
     - Reject connection on invalid token
     - _Requirements: 4.4_
 
-  - [ ] 5.3 Register AuthMiddleware in `server/main.py` middleware stack
+  - [x] 5.3 Register AuthMiddleware in `server/main.py` middleware stack
     - _Requirements: 4.1_
 
   - [ ]* 5.4 Write property tests for JWT authentication (Property 5)

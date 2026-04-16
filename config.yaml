@@ -11,6 +11,8 @@ embedding_model: "text-embedding-3-small"
 
 # ── 日志 ─────────────────────────────────────────────
 log_level: "INFO"             # DEBUG | INFO | WARNING | ERROR
+log_file: "logs/app.log"
+
 # log_file: null              # 可选，日志文件路径
 
 # ── 认证（JWT）────────────────────────────────────────

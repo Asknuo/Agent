@@ -82,3 +82,55 @@ export async function rateSession(sessionId: string, rating: number): Promise<vo
     body: JSON.stringify({ rating }),
   });
 }
+
+/** 指标数据结构 */
+export interface MetricEntry {
+  name: string;
+  type: string;
+  help: string;
+  samples: { labels: Record<string, string>; value: number }[];
+}
+
+/** 拉取并解析 /metrics 端点的 Prometheus 文本 */
+export async function fetchMetrics(): Promise<MetricEntry[]> {
+  const res = await fetch('/metrics');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return parsePrometheusText(text);
+}
+
+function parsePrometheusText(text: string): MetricEntry[] {
+  const metrics: MetricEntry[] = [];
+  let current: MetricEntry | null = null;
+
+  for (const line of text.split('\n')) {
+    if (line.startsWith('# HELP ')) {
+      const rest = line.slice(7);
+      const idx = rest.indexOf(' ');
+      const name = rest.slice(0, idx);
+      const help = rest.slice(idx + 1);
+      current = { name, type: '', help, samples: [] };
+      metrics.push(current);
+    } else if (line.startsWith('# TYPE ')) {
+      const rest = line.slice(7);
+      const idx = rest.indexOf(' ');
+      const type = rest.slice(idx + 1);
+      if (current) current.type = type;
+    } else if (line && !line.startsWith('#') && current) {
+      const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)\{?(.*?)\}?\s+([\d.eE+-]+|NaN|Inf|\+Inf|-Inf)$/);
+      if (match) {
+        const labels: Record<string, string> = {};
+        if (match[2]) {
+          for (const pair of match[2].split(',')) {
+            const eqIdx = pair.indexOf('=');
+            if (eqIdx > 0) {
+              labels[pair.slice(0, eqIdx)] = pair.slice(eqIdx + 1).replace(/"/g, '');
+            }
+          }
+        }
+        current.samples.push({ labels, value: parseFloat(match[3]) });
+      }
+    }
+  }
+  return metrics;
+}

@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { sendMessageStream, rateSession, ChatMetadata } from './api';
+import { sendMessageStream, rateSession, fetchMetrics, ChatMetadata, MetricEntry } from './api';
 import ReactMarkdown from 'react-markdown';
 import { Tag, Rate, Tooltip, ConfigProvider } from 'antd';
 import {
   SendOutlined, ReloadOutlined, ClockCircleOutlined, ToolOutlined,
+  DashboardOutlined, LogoutOutlined, UserOutlined, LockOutlined,
 } from '@ant-design/icons';
 
 interface ChatMessage {
@@ -12,6 +13,11 @@ interface ChatMessage {
   content: string;
   timestamp: number;
   metadata?: ChatMetadata;
+}
+
+interface UserInfo {
+  username: string;
+  role: 'user' | 'admin';
 }
 
 const quickReplies = [
@@ -37,12 +43,277 @@ const intentMap: Record<string, string> = {
   human_handoff: '👤 转人工', feedback: '📝 反馈',
 };
 
-export default function App() {
+// ── 登录页面 ─────────────────────────────────────────
+
+function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      setError('请输入用户名和密码');
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    // 模拟登录验证：admin/admin 为管理员，其他任意用户名+密码为普通用户
+    setTimeout(() => {
+      if (password.length < 3) {
+        setError('密码长度至少 3 位');
+        setLoading(false);
+        return;
+      }
+      const role = (username === 'admin' && password === 'admin') ? 'admin' as const : 'user' as const;
+      const user: UserInfo = { username: username.trim(), role };
+      localStorage.setItem('xiaozhi_user', JSON.stringify(user));
+      onLogin(user);
+      setLoading(false);
+    }, 500);
+  };
+
+  return (
+    <div className="app-bg">
+      <div className="bg-orb bg-orb-1" />
+      <div className="bg-orb bg-orb-2" />
+      <div className="bg-orb bg-orb-3" />
+      <div className="login-card">
+        <div className="login-header">
+          <div className="avatar-bot-lg">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="10" rx="2" />
+              <circle cx="12" cy="5" r="2" />
+              <path d="M12 7v4" />
+            </svg>
+          </div>
+          <h2 className="login-title">小智 AI 客服</h2>
+          <p className="login-desc">登录后开始对话</p>
+        </div>
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="login-field">
+            <UserOutlined className="login-icon" />
+            <input
+              type="text"
+              placeholder="用户名"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              className="login-input"
+              autoFocus
+              aria-label="用户名"
+            />
+          </div>
+          <div className="login-field">
+            <LockOutlined className="login-icon" />
+            <input
+              type="password"
+              placeholder="密码"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="login-input"
+              aria-label="密码"
+            />
+          </div>
+          {error && <div className="login-error">{error}</div>}
+          <button type="submit" className="login-btn" disabled={loading}>
+            {loading ? '登录中...' : '登 录'}
+          </button>
+          <div className="login-hint">管理员: admin / admin · 普通用户: 任意用户名</div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Metrics 面板 ─────────────────────────────────────
+
+function MetricsPanel({ onClose }: { onClose: () => void }) {
+  const [metrics, setMetrics] = useState<MetricEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  const loadMetrics = useCallback(async () => {
+    try {
+      const data = await fetchMetrics();
+      setMetrics(data);
+      setError('');
+    } catch (e: any) {
+      setError(e.message || '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMetrics();
+    if (!autoRefresh) return;
+    const timer = setInterval(loadMetrics, 5000);
+    return () => clearInterval(timer);
+  }, [loadMetrics, autoRefresh]);
+
+  // 从 metrics 中提取关键数据
+  const getCounterValue = (name: string, labels?: Record<string, string>): number => {
+    const m = metrics.find(m => m.name === name);
+    if (!m) return 0;
+    if (!labels) return m.samples.reduce((sum, s) => sum + s.value, 0);
+    return m.samples
+      .filter(s => Object.entries(labels).every(([k, v]) => s.labels[k] === v))
+      .reduce((sum, s) => sum + s.value, 0);
+  };
+
+  const getToolCallSamples = () => {
+    const m = metrics.find(m => m.name === 'agent_tool_calls_total');
+    if (!m) return [];
+    const grouped: Record<string, number> = {};
+    for (const s of m.samples) {
+      const name = s.labels['tool_name'] || 'unknown';
+      grouped[name] = (grouped[name] || 0) + s.value;
+    }
+    return Object.entries(grouped).sort((a, b) => b[1] - a[1]);
+  };
+
+  const getNodeDurationSamples = () => {
+    const m = metrics.find(m => m.name === 'agent_node_duration_ms_count');
+    const mSum = metrics.find(m => m.name === 'agent_node_duration_ms_sum');
+    if (!m || !mSum) return [];
+    const result: { node: string; count: number; avgMs: number }[] = [];
+    for (const s of m.samples) {
+      const node = s.labels['node'] || 'unknown';
+      const sumSample = mSum.samples.find(ss => ss.labels['node'] === node);
+      const avg = sumSample && s.value > 0 ? Math.round(sumSample.value / s.value) : 0;
+      result.push({ node, count: s.value, avgMs: avg });
+    }
+    return result.sort((a, b) => b.count - a.count);
+  };
+
+  const totalRequests = getCounterValue('agent_requests_total');
+  const toolCalls = getToolCallSamples();
+  const nodeDurations = getNodeDurationSamples();
+
+  return (
+    <div className="metrics-overlay">
+      <div className="metrics-panel">
+        <div className="metrics-header">
+          <div className="metrics-header-left">
+            <DashboardOutlined style={{ fontSize: 18 }} />
+            <span className="metrics-title">系统监控</span>
+          </div>
+          <div className="metrics-header-right">
+            <label className="metrics-toggle">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={e => setAutoRefresh(e.target.checked)}
+              />
+              <span>自动刷新</span>
+            </label>
+            <button className="metrics-refresh-btn" onClick={loadMetrics} title="手动刷新">↻</button>
+            <button className="metrics-close-btn" onClick={onClose}>✕</button>
+          </div>
+        </div>
+
+        {loading && <div className="metrics-loading">加载中...</div>}
+        {error && <div className="metrics-error">⚠ {error}</div>}
+
+        {!loading && !error && (
+          <div className="metrics-body chat-scroll">
+            {/* 概览卡片 */}
+            <div className="metrics-cards">
+              <div className="metric-card">
+                <div className="metric-card-value">{totalRequests}</div>
+                <div className="metric-card-label">总请求数</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-card-value">{toolCalls.reduce((s, [, v]) => s + v, 0)}</div>
+                <div className="metric-card-label">工具调用</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-card-value">{nodeDurations.reduce((s, d) => s + d.count, 0)}</div>
+                <div className="metric-card-label">节点执行</div>
+              </div>
+            </div>
+
+            {/* 工具调用统计 */}
+            {toolCalls.length > 0 && (
+              <div className="metrics-section">
+                <h3 className="metrics-section-title">🔧 工具调用统计</h3>
+                <div className="metrics-table">
+                  <div className="metrics-table-header">
+                    <span>工具名称</span><span>调用次数</span>
+                  </div>
+                  {toolCalls.map(([name, count]) => (
+                    <div key={name} className="metrics-table-row">
+                      <span className="metrics-tool-name">{name}</span>
+                      <span className="metrics-tool-count">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 节点耗时 */}
+            {nodeDurations.length > 0 && (
+              <div className="metrics-section">
+                <h3 className="metrics-section-title">⏱ 节点耗时</h3>
+                <div className="metrics-table">
+                  <div className="metrics-table-header">
+                    <span>节点</span><span>执行次数</span><span>平均耗时</span>
+                  </div>
+                  {nodeDurations.map(d => (
+                    <div key={d.node} className="metrics-table-row metrics-table-row-3">
+                      <span className="metrics-node-name">{d.node}</span>
+                      <span>{d.count}</span>
+                      <span className="metrics-duration">{d.avgMs}ms</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 原始指标 */}
+            <div className="metrics-section">
+              <h3 className="metrics-section-title">📊 全部指标</h3>
+              <div className="metrics-raw">
+                {metrics.map(m => (
+                  <div key={m.name} className="metrics-raw-item">
+                    <div className="metrics-raw-name">{m.name} <Tag>{m.type}</Tag></div>
+                    <div className="metrics-raw-help">{m.help}</div>
+                    {m.samples.slice(0, 10).map((s, i) => (
+                      <div key={i} className="metrics-raw-sample">
+                        {Object.keys(s.labels).length > 0 && (
+                          <span className="metrics-raw-labels">
+                            {Object.entries(s.labels).map(([k, v]) => `${k}="${v}"`).join(', ')}
+                          </span>
+                        )}
+                        <span className="metrics-raw-value">{s.value}</span>
+                      </div>
+                    ))}
+                    {m.samples.length > 10 && (
+                      <div className="metrics-raw-more">... 还有 {m.samples.length - 10} 条</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 聊天主界面 ───────────────────────────────────────
+
+function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [rated, setRated] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -98,9 +369,8 @@ export default function App() {
   const showRating = !loading && !rated && sessionId && messages.filter(m => m.role === 'user').length >= 2;
 
   return (
-    <ConfigProvider theme={{ token: { colorPrimary: '#6366f1', borderRadius: 10 } }}>
+    <>
       <div className="app-bg">
-        {/* 背景装饰 */}
         <div className="bg-orb bg-orb-1" />
         <div className="bg-orb bg-orb-2" />
         <div className="bg-orb bg-orb-3" />
@@ -122,15 +392,29 @@ export default function App() {
                 <div className="header-title">小智 AI 客服</div>
                 <div className="header-status">
                   <span className="status-dot" />
-                  <span>在线 · 通常秒回</span>
+                  <span>在线 · {user.username}</span>
                 </div>
               </div>
             </div>
-            <Tooltip title="开始新对话" placement="bottomRight">
-              <button className="header-btn" onClick={handleReset} aria-label="新对话">
-                <ReloadOutlined />
-              </button>
-            </Tooltip>
+            <div className="header-actions">
+              {user.role === 'admin' && (
+                <Tooltip title="系统监控" placement="bottom">
+                  <button className="header-btn" onClick={() => setShowMetrics(true)} aria-label="监控面板">
+                    <DashboardOutlined />
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip title="开始新对话" placement="bottom">
+                <button className="header-btn" onClick={handleReset} aria-label="新对话">
+                  <ReloadOutlined />
+                </button>
+              </Tooltip>
+              <Tooltip title="退出登录" placement="bottomRight">
+                <button className="header-btn" onClick={onLogout} aria-label="退出">
+                  <LogoutOutlined />
+                </button>
+              </Tooltip>
+            </div>
           </div>
 
           {/* Messages */}
@@ -140,8 +424,8 @@ export default function App() {
                 <div className="welcome-avatar">
                   <span className="welcome-emoji">🤖</span>
                 </div>
-                <h2 className="welcome-title">你好，我是小智</h2>
-                <p className="welcome-desc">你的 AI 智能客服助手，有什么可以帮你的？</p>
+                <h2 className="welcome-title">你好，{user.username}</h2>
+                <p className="welcome-desc">我是小智，你的 AI 智能客服助手，有什么可以帮你的？</p>
                 <div className="quick-grid">
                   {quickReplies.map(q => (
                     <button key={q.text} className="quick-btn" onClick={() => handleSend(q.text)}>
@@ -155,7 +439,6 @@ export default function App() {
               <div className="msg-list">
                 {messages.map(msg => {
                   if (msg.role === 'assistant' && !msg.content) return null;
-
                   const isUser = msg.role === 'user';
 
                   const botIcon = (
@@ -214,7 +497,6 @@ export default function App() {
                   );
                 })}
 
-                {/* Typing */}
                 {loading && (messages.length === 0 || messages[messages.length - 1].content === '') && (
                   <div className="msg-row msg-row-bot">
                     <div className="avatar-bot-sm">
@@ -273,6 +555,36 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {showMetrics && <MetricsPanel onClose={() => setShowMetrics(false)} />}
+    </>
+  );
+}
+
+// ── 根组件 ───────────────────────────────────────────
+
+export default function App() {
+  const [user, setUser] = useState<UserInfo | null>(() => {
+    try {
+      const saved = localStorage.getItem('xiaozhi_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem('xiaozhi_user');
+    setUser(null);
+  };
+
+  return (
+    <ConfigProvider theme={{ token: { colorPrimary: '#6366f1', borderRadius: 10 } }}>
+      {user ? (
+        <ChatPage user={user} onLogout={handleLogout} />
+      ) : (
+        <LoginPage onLogin={setUser} />
+      )}
     </ConfigProvider>
   );
 }
