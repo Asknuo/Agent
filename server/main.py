@@ -30,9 +30,11 @@ from server.rate_limiter import RateLimitMiddleware, SlidingWindowRateLimiter
 from server.tracing import TraceMiddleware, get_metrics_response
 from server.agent import (
     process_message, get_session, get_all_sessions, rate_session,
+    set_session_store,
 )
 from server.knowledge_base import get_all_knowledge, init_rag
 from server.database import init_db
+from server.session_store import SessionStore
 from server.tools import get_all_tickets
 
 logger = logging.getLogger("main")
@@ -40,7 +42,7 @@ logger = logging.getLogger("main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时初始化配置 → 日志 → RAG 向量库 → 数据库连接"""
+    """启动时初始化配置 → 日志 → RAG 向量库 → 数据库连接 → 会话存储"""
     config = init_config()
 
     # 初始化结构化日志系统（需求 1.4, 1.5）
@@ -55,7 +57,16 @@ async def lifespan(app: FastAPI):
 
     init_db()
     init_rag()
+
+    # Initialize session store (Requirement 3.1)
+    session_store = SessionStore(db_url=config.db_url)
+    await session_store.init()
+    set_session_store(session_store)
+
     yield
+
+    # Cleanup
+    await session_store.close()
 
 
 app = FastAPI(title="小智 AI 智能客服", version="1.0.0", lifespan=lifespan)
@@ -174,18 +185,18 @@ async def chat_stream(req: ChatRequest):
 
 @app.get("/api/sessions")
 async def list_sessions():
-    return get_all_sessions()
+    return await get_all_sessions()
 
 
 @app.get("/api/sessions/{session_id}")
 async def get_session_detail(session_id: str):
-    s = get_session(session_id)
+    s = await get_session(session_id)
     return s if s else {"error": "Session not found"}
 
 
 @app.post("/api/sessions/{session_id}/rate")
 async def rate(session_id: str, req: RateRequest):
-    ok = rate_session(session_id, req.rating)
+    ok = await rate_session(session_id, req.rating)
     return {"success": ok} if ok else {"error": "Session not found"}
 
 
@@ -254,7 +265,7 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query(default="")):
 
             elif msg_type == "rating":
                 rating = data.get("payload", {}).get("rating", 5)
-                rate_session(session_id, rating)
+                await rate_session(session_id, rating)
                 await ws.send_json({"type": "status", "sessionId": session_id, "payload": {"rated": True}})
 
     except WebSocketDisconnect:

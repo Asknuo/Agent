@@ -40,6 +40,7 @@ from server.models import (
     Sentiment, IntentCategory, SessionStatus,
 )
 from server.retry import RetryEngine, RetryExhaustedError
+from server.session_store import SessionStore
 from server.tools import ALL_TOOLS
 from server.tracing import TOOL_CALLS, timed_node
 
@@ -516,33 +517,46 @@ def _get_graph():
     return _graph
 
 
-# ── 会话管理 ──────────────────────────────────────────
+# ── 会话管理（SessionStore 持久化）─────────────────────
 
-_sessions: dict[str, Session] = {}
+_session_store: SessionStore | None = None
 
 
-def get_or_create_session(sid: str, uid: str) -> Session:
-    if sid in _sessions:
-        return _sessions[sid]
+def get_session_store() -> SessionStore:
+    """Return the global SessionStore instance (created during lifespan)."""
+    global _session_store
+    if _session_store is None:
+        # Lazy fallback — memory-only store when lifespan hasn't run
+        _session_store = SessionStore(db_url="")
+    return _session_store
+
+
+def set_session_store(store: SessionStore) -> None:
+    """Called by main.py lifespan to inject the initialised store."""
+    global _session_store
+    _session_store = store
+
+
+async def get_or_create_session(sid: str, uid: str) -> Session:
+    store = get_session_store()
+    existing = await store.load(sid)
+    if existing is not None:
+        return existing
     s = Session(id=sid, user_id=uid)
-    _sessions[sid] = s
+    await store.save(s)
     return s
 
 
-def get_session(sid: str) -> Optional[Session]:
-    return _sessions.get(sid)
+async def get_session(sid: str) -> Optional[Session]:
+    return await get_session_store().load(sid)
 
 
-def get_all_sessions() -> list[Session]:
-    return list(_sessions.values())
+async def get_all_sessions() -> list[Session]:
+    return await get_session_store().get_all()
 
 
-def rate_session(sid: str, rating: int) -> bool:
-    s = _sessions.get(sid)
-    if not s:
-        return False
-    s.satisfaction = max(1, min(5, rating))
-    return True
+async def rate_session(sid: str, rating: int) -> bool:
+    return await get_session_store().rate(sid, rating)
 
 
 # ── 对外接口 ──────────────────────────────────────────
@@ -551,7 +565,7 @@ async def process_message(
     session_id: str, user_id: str, user_message: str
 ) -> tuple[str, MessageMetadata]:
     start = time.time()
-    session = get_or_create_session(session_id, user_id)
+    session = await get_or_create_session(session_id, user_id)
 
     # Set context vars for structured logging (需求 1.2)
     session_id_var.set(session_id)
@@ -609,11 +623,14 @@ async def process_message(
         knowledge_refs=knowledge_refs,
         response_time_ms=int((time.time() - start) * 1000),
     )
-    session.messages.append(Message(
+    user_msg = Message(
         role="user", content=user_message,
         metadata=MessageMetadata(sentiment=sentiment, intent=intent, confidence=confidence, language=language),
-    ))
-    session.messages.append(Message(role="assistant", content=reply, metadata=metadata))
+    )
+    bot_msg = Message(role="assistant", content=reply, metadata=metadata)
+
+    session.messages.append(user_msg)
+    session.messages.append(bot_msg)
     session.context.language = language
     session.context.sentiment_trend.append(sentiment)
     if confidence > 0.3:
@@ -621,6 +638,10 @@ async def process_message(
     if should_escalate:
         session.status = SessionStatus.ESCALATED
     session.updated_at = time.time()
+
+    # Persist session to store (Requirement 3.2)
+    store = get_session_store()
+    await store.save(session)
 
     return reply, metadata
 

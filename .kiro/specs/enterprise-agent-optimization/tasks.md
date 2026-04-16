@@ -205,27 +205,27 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Wrap process_message calls with concurrency controller
     - _Requirements: 10.1, 10.2_
 
-  - [ ]* 12.3 Write property test for concurrency control (Property 15)
+  - [x] 12.3 Write property test for concurrency control (Property 15)
     - **Property 15: Concurrency limit** — at most max_concurrent processing, 503 on overflow
     - **Validates: Requirements 10.1, 10.2**
 
-- [ ] 13. Checkpoint — Ensure all tests pass
+- [x] 13. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 14. Implement session persistence (`server/session_store.py`)
-  - [ ] 14.1 Create `server/session_store.py` with `SessionStore` class
+- [x] 14. Implement session persistence (`server/session_store.py`)
+  - [x] 14.1 Create `server/session_store.py` with `SessionStore` class
     - Implement async PostgreSQL operations using `asyncpg` connection pool
     - Implement `save()`, `load()`, `list_by_user()`, `upsert_messages()` methods
     - Serialize messages and context as JSONB
     - Fallback to in-memory dict on database write failure, log ERROR
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-  - [ ] 14.2 Create database migration: sessions table with indexes
+  - [x] 14.2 Create database migration: sessions table with indexes
     - Create sessions table (id, user_id, tenant_id, messages JSONB, context JSONB, status, satisfaction, created_at, updated_at)
     - Add indexes on user_id, tenant_id, status, updated_at
     - _Requirements: 3.1_
 
-  - [ ] 14.3 Refactor `server/agent.py` to use SessionStore instead of in-memory `_sessions` dict
+  - [x] 14.3 Refactor `server/agent.py` to use SessionStore instead of in-memory `_sessions` dict
     - Replace `get_or_create_session`, `get_session`, `get_all_sessions`, `rate_session` with SessionStore calls
     - Update `process_message` to persist messages after each exchange
     - _Requirements: 3.2, 3.3_
