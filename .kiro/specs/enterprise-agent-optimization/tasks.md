@@ -131,14 +131,14 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
 - [x] 8. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Implement retry engine and circuit breaker (`server/retry.py`, `server/circuit_breaker.py`)
-  - [ ] 9.1 Create `server/retry.py` with `RetryEngine` class
+- [x] 9. Implement retry engine and circuit breaker (`server/retry.py`, `server/circuit_breaker.py`)
+  - [x] 9.1 Create `server/retry.py` with `RetryEngine` class
     - Implement exponential backoff: base_delay * 2^attempt (1s, 2s, 4s)
     - Configurable max_retries (default 3)
     - Log WARNING on each retry attempt
     - _Requirements: 7.1_
 
-  - [ ] 9.2 Create `server/circuit_breaker.py` with `CircuitBreaker` class
+  - [x] 9.2 Create `server/circuit_breaker.py` with `CircuitBreaker` class
     - Implement three states: CLOSED, OPEN, HALF_OPEN
     - Transition CLOSED → OPEN after failure_threshold consecutive failures (default 5)
     - Transition OPEN → HALF_OPEN after recovery_timeout seconds (default 60)
@@ -146,12 +146,12 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Raise `CircuitOpenError` when circuit is open
     - _Requirements: 7.4, 7.5_
 
-  - [ ] 9.3 Integrate retry + circuit breaker into `server/agent.py` for LLM calls
+  - [x] 9.3 Integrate retry + circuit breaker into `server/agent.py` for LLM calls
     - Wrap `_worker_llm.invoke()` and `_supervisor_llm.invoke()` with retry + circuit breaker
     - On exhausted retries, return predefined fallback reply and log ERROR
     - _Requirements: 7.1, 7.3_
 
-  - [ ] 9.4 Add structured tool exception handling in `tool_node` in `server/agent.py`
+  - [x] 9.4 Add structured tool exception handling in `tool_node` in `server/agent.py`
     - Catch tool execution exceptions, return ToolMessage with error info to Worker
     - _Requirements: 7.2_
 

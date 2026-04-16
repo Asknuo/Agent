@@ -30,12 +30,16 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
+from langchain_core.messages import ToolMessage
+
+from server.circuit_breaker import CircuitBreaker, CircuitOpenError
 from server.config import get_config
 from server.logging_config import session_id_var, user_id_var
 from server.models import (
     Message, MessageMetadata, Session,
     Sentiment, IntentCategory, SessionStatus,
 )
+from server.retry import RetryEngine, RetryExhaustedError
 from server.tools import ALL_TOOLS
 from server.tracing import TOOL_CALLS, timed_node
 
@@ -50,6 +54,57 @@ def _make_llm(**kwargs: Any) -> ChatOpenAI:
         base_url=cfg.openai_base_url or None,
         **kwargs,
     )
+
+
+# ── Retry + Circuit Breaker ──────────────────────────
+
+_retry_engine: RetryEngine | None = None
+_circuit_breaker: CircuitBreaker | None = None
+
+
+def _get_retry_engine() -> RetryEngine:
+    global _retry_engine
+    if _retry_engine is None:
+        cfg = get_config()
+        _retry_engine = RetryEngine(
+            max_retries=cfg.retry_max_attempts,
+            base_delay=cfg.retry_base_delay,
+        )
+    return _retry_engine
+
+
+def _get_circuit_breaker() -> CircuitBreaker:
+    global _circuit_breaker
+    if _circuit_breaker is None:
+        cfg = get_config()
+        _circuit_breaker = CircuitBreaker(
+            failure_threshold=cfg.circuit_breaker_threshold,
+            recovery_timeout=float(cfg.circuit_breaker_recovery_s),
+        )
+    return _circuit_breaker
+
+
+async def _resilient_llm_invoke(llm: Any, messages: list, label: str = "llm") -> Any:
+    """
+    通过 circuit breaker + retry 调用 LLM。
+
+    失败链: 调用 → 重试(指数退避) → 熔断检测 → 抛出
+    """
+    cb = _get_circuit_breaker()
+    retry = _get_retry_engine()
+
+    async def _invoke():
+        return await cb.call(lambda: llm.ainvoke(messages))
+
+    try:
+        return await retry.execute(_invoke)
+    except (RetryExhaustedError, CircuitOpenError) as exc:
+        logger.error("llm_call_failed", extra={"extra_fields": {
+            "label": label,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }})
+        raise
 
 
 # ── Prompts ───────────────────────────────────────────
@@ -174,7 +229,7 @@ _supervisor_llm = _make_llm(temperature=0.0, max_tokens=60)
 
 
 @timed_node("supervisor")
-def supervisor_node(state: AgentState) -> dict[str, Any]:
+async def supervisor_node(state: AgentState) -> dict[str, Any]:
     node_start = time.time()
     logger.info("node_enter", extra={"extra_fields": {"node": "supervisor", "event": "enter"}})
 
@@ -188,18 +243,24 @@ def supervisor_node(state: AgentState) -> dict[str, Any]:
     intent, confidence = _classify_intent(user_text)
     language = _detect_language(user_text)
 
-    # LLM 路由
-    resp = _supervisor_llm.invoke([
-        SystemMessage(content=SUPERVISOR_PROMPT),
-        HumanMessage(content=user_text),
-    ])
-    content = str(resp.content).strip()
+    # LLM 路由 (with retry + circuit breaker)
+    try:
+        resp = await _resilient_llm_invoke(
+            _supervisor_llm,
+            [SystemMessage(content=SUPERVISOR_PROMPT), HumanMessage(content=user_text)],
+            label="supervisor",
+        )
+    except (RetryExhaustedError, CircuitOpenError):
+        # 降级: 使用关键词规则决定路由
+        resp = None
+    content = str(resp.content).strip() if resp else ""
 
     next_step = "worker"
     try:
-        if "```" in content:
+        if content and "```" in content:
             content = content.split("```")[1].removeprefix("json")
-        next_step = _json.loads(content).get("next", "worker")
+        if content:
+            next_step = _json.loads(content).get("next", "worker")
     except Exception:
         if intent == IntentCategory.HUMAN_HANDOFF:
             next_step = "human"
@@ -258,13 +319,21 @@ def _ensure_worker():
 
 
 @timed_node("worker")
-def worker_node(state: AgentState) -> dict[str, Any]:
+async def worker_node(state: AgentState) -> dict[str, Any]:
     _ensure_worker()
     node_start = time.time()
     logger.info("node_enter", extra={"extra_fields": {"node": "worker", "event": "enter"}})
 
     msgs = [SystemMessage(content=WORKER_PROMPT)] + list(state["messages"])
-    resp = _worker_llm.invoke(msgs)
+
+    try:
+        resp = await _resilient_llm_invoke(_worker_llm, msgs, label="worker")
+    except (RetryExhaustedError, CircuitOpenError):
+        # 降级: 返回预定义回复
+        sentiment = state.get("sentiment", Sentiment.NEUTRAL)
+        intent = state.get("intent", IntentCategory.GENERAL_CHAT)
+        fallback = _get_fallback_reply(intent, sentiment)
+        resp = AIMessage(content=fallback)
 
     duration_ms = int((time.time() - node_start) * 1000)
     logger.info("node_exit", extra={"extra_fields": {
@@ -286,10 +355,49 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     node_start = time.time()
     logger.info("node_enter", extra={"extra_fields": {"node": "tool", "event": "enter"}})
 
-    result = _tool_executor.invoke(state)
+    # Identify the pending tool calls for error handling
     last_ai = state["messages"][-1]
     new_tools: list[str] = []
     new_refs: list[str] = []
+
+    try:
+        result = _tool_executor.invoke(state)
+    except Exception as exc:
+        # 结构化异常处理 — 需求 7.2
+        logger.error("tool_execution_failed", exc_info=exc, extra={"extra_fields": {
+            "node": "tool", "event": "error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }})
+        # 构造 ToolMessage 返回给 Worker，让它选择替代方案
+        tool_call_id = ""
+        if isinstance(last_ai, AIMessage) and last_ai.tool_calls:
+            tool_call_id = last_ai.tool_calls[-1].get("id", "")
+            for tc in last_ai.tool_calls:
+                tool_name = tc["name"]
+                new_tools.append(tool_name)
+                TOOL_CALLS.labels(tool_name=tool_name, status="error").inc()
+
+        error_msg = ToolMessage(
+            content=(
+                f"工具执行失败: {type(exc).__name__}: {str(exc)}。"
+                "请尝试其他方式回答用户。"
+            ),
+            tool_call_id=tool_call_id,
+        )
+
+        duration_ms = int((time.time() - node_start) * 1000)
+        logger.info("node_exit", extra={"extra_fields": {
+            "node": "tool", "event": "exit", "duration_ms": duration_ms,
+            "tools_called": new_tools, "status": "error",
+        }})
+
+        return {
+            "messages": [error_msg],
+            "tools_used": state.get("tools_used", []) + new_tools,
+            "knowledge_refs": state.get("knowledge_refs", []) + new_refs,
+        }
+
     if isinstance(last_ai, AIMessage) and last_ai.tool_calls:
         for tc in last_ai.tool_calls:
             tool_name = tc["name"]
@@ -323,7 +431,7 @@ _reviewer_llm = _make_llm(temperature=0.3, max_tokens=2048)
 
 
 @timed_node("reviewer")
-def reviewer_node(state: AgentState) -> dict[str, Any]:
+async def reviewer_node(state: AgentState) -> dict[str, Any]:
     node_start = time.time()
     logger.info("node_enter", extra={"extra_fields": {"node": "reviewer", "event": "enter"}})
 
@@ -334,14 +442,23 @@ def reviewer_node(state: AgentState) -> dict[str, Any]:
         }})
         return {"final_reply": "您好！我是小智，请问有什么可以帮您？"}
 
-    resp = _reviewer_llm.invoke([
-        SystemMessage(content=REVIEWER_PROMPT),
-        HumanMessage(content=(
-            f"用户：{state.get('user_text', '')}\n"
-            f"情绪：{state.get('sentiment', Sentiment.NEUTRAL).value}\n"
-            f"客服回复：\n{agent_reply}"
-        )),
-    ])
+    try:
+        resp = await _resilient_llm_invoke(
+            _reviewer_llm,
+            [
+                SystemMessage(content=REVIEWER_PROMPT),
+                HumanMessage(content=(
+                    f"用户：{state.get('user_text', '')}\n"
+                    f"情绪：{state.get('sentiment', Sentiment.NEUTRAL).value}\n"
+                    f"客服回复：\n{agent_reply}"
+                )),
+            ],
+            label="reviewer",
+        )
+        reviewed = str(resp.content).strip()
+    except (RetryExhaustedError, CircuitOpenError):
+        # 降级: 直接使用 worker 的原始回复
+        reviewed = agent_reply
 
     duration_ms = int((time.time() - node_start) * 1000)
     logger.info("node_exit", extra={"extra_fields": {
@@ -349,8 +466,8 @@ def reviewer_node(state: AgentState) -> dict[str, Any]:
     }})
 
     return {
-        "final_reply": str(resp.content).strip(),
-        "messages": [AIMessage(content=str(resp.content).strip())],
+        "final_reply": reviewed,
+        "messages": [AIMessage(content=reviewed)],
     }
 
 
