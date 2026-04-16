@@ -94,14 +94,14 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - **Property 5: JWT authentication correctness** — accept valid tokens, reject invalid/expired/wrong-issuer
     - **Validates: Requirements 4.1, 4.2, 4.3**
 
-- [ ] 6. Implement rate limiting (`server/rate_limiter.py`)
-  - [ ] 6.1 Create `server/rate_limiter.py` with `SlidingWindowRateLimiter` class
+- [x] 6. Implement rate limiting (`server/rate_limiter.py`)
+  - [x] 6.1 Create `server/rate_limiter.py` with `SlidingWindowRateLimiter` class
     - Implement sliding window algorithm with configurable max_requests and window_seconds
     - Support key-based limiting (IP or user_id)
     - Return (is_allowed, retry_after_seconds) tuple
     - _Requirements: 5.1, 5.2, 5.4_
 
-  - [ ] 6.2 Create rate limit middleware and register in `server/main.py`
+  - [x] 6.2 Create rate limit middleware and register in `server/main.py`
     - Apply to /api/chat and /api/chat/stream endpoints
     - Return HTTP 429 with Retry-After header when exceeded
     - _Requirements: 5.1, 5.3_
