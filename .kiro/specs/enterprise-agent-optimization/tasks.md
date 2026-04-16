@@ -110,8 +110,8 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - **Property 6: Sliding window correctness** — at most max_requests allowed per window, positive Retry-After on rejection
     - **Validates: Requirements 5.1, 5.3, 5.4**
 
-- [ ] 7. Implement SQL injection guard (`server/sql_guard.py`)
-  - [ ] 7.1 Create `server/sql_guard.py` with `SQLGuard` class
+- [x] 7. Implement SQL injection guard (`server/sql_guard.py`)
+  - [x] 7.1 Create `server/sql_guard.py` with `SQLGuard` class
     - Use `sqlparse` for AST-level SQL validation
     - Allow only single SELECT statements
     - Check subquery nesting depth (max 2)
@@ -119,16 +119,16 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Enforce result row limit (default 50, configurable)
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
 
-  - [ ] 7.2 Integrate SQLGuard into `server/database.py` `execute_query()` function
+  - [x] 7.2 Integrate SQLGuard into `server/database.py` `execute_query()` function
     - Replace existing `_validate_sql` with SQLGuard validation
     - Apply row limit from config
     - _Requirements: 6.1, 6.2, 6.4_
 
-  - [ ]* 7.3 Write property tests for SQL guard (Property 7)
+  - [x] 7.3 Write property tests for SQL guard (Property 7)
     - **Property 7: SQL safety validation** — accept valid single SELECTs, reject non-SELECT/UNION/deep subqueries
     - **Validates: Requirements 6.2, 6.3**
 
-- [ ] 8. Checkpoint — Ensure all tests pass
+- [x] 8. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Implement retry engine and circuit breaker (`server/retry.py`, `server/circuit_breaker.py`)

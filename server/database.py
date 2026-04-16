@@ -9,6 +9,7 @@ import re
 from typing import Optional
 
 from server.config import get_config
+from server.sql_guard import SQLGuard
 
 logger = logging.getLogger("database")
 
@@ -16,13 +17,21 @@ _engine = None
 _allowed_tables: list[str] = []
 _readonly: bool = True
 _db_available: bool = False
+_sql_guard: SQLGuard | None = None
 
 
 def init_db() -> None:
     """启动时初始化数据库连接"""
-    global _engine, _allowed_tables, _readonly, _db_available
+    global _engine, _allowed_tables, _readonly, _db_available, _sql_guard
 
     config = get_config()
+
+    # Initialise SQL guard with config values
+    _sql_guard = SQLGuard(
+        max_subquery_depth=config.sql_max_subquery_depth,
+        max_rows=config.sql_max_rows,
+    )
+
     db_url = config.db_url.strip()
     if not db_url:
         logger.info("db_not_configured")
@@ -79,14 +88,23 @@ def get_table_schema() -> str:
 
 
 def _validate_sql(sql: str) -> Optional[str]:
-    """SQL 安全校验，返回错误信息或 None（通过）"""
+    """SQL 安全校验，返回错误信息或 None（通过）。
+
+    Uses SQLGuard for AST-level validation, then checks table allow-list.
+    """
+    # AST-level validation via SQLGuard
+    if _sql_guard is not None:
+        ok, err = _sql_guard.validate(sql)
+        if not ok:
+            return err
+    else:
+        # Fallback: basic keyword check when guard not initialised
+        sql_upper = sql.strip().upper()
+        if _readonly and not sql_upper.startswith("SELECT"):
+            return "只读模式，仅允许 SELECT 查询"
+
+    # 禁止危险操作 (belt-and-suspenders alongside SQLGuard)
     sql_upper = sql.strip().upper()
-
-    # 只读模式下只允许 SELECT
-    if _readonly and not sql_upper.startswith("SELECT"):
-        return "只读模式，仅允许 SELECT 查询"
-
-    # 禁止危险操作
     dangerous = ["DROP ", "TRUNCATE ", "DELETE ", "ALTER ", "GRANT ", "REVOKE "]
     for d in dangerous:
         if d in sql_upper:
@@ -94,7 +112,6 @@ def _validate_sql(sql: str) -> Optional[str]:
 
     # 检查表名是否在允许列表内
     if _allowed_tables:
-        # 简单提取 FROM/JOIN 后的表名
         table_refs = re.findall(r'\b(?:FROM|JOIN)\s+(\w+)', sql, re.IGNORECASE)
         for t in table_refs:
             if t.lower() not in [a.lower() for a in _allowed_tables]:
@@ -113,10 +130,14 @@ def execute_query(sql: str, limit: int = 20) -> str:
     if error:
         return f"查询被拒绝: {error}"
 
-    # 自动加 LIMIT 防止返回过多数据
-    sql_upper = sql.strip().upper()
-    if "LIMIT" not in sql_upper and sql_upper.startswith("SELECT"):
-        sql = f"{sql.rstrip(';')} LIMIT {limit}"
+    # Apply row limit via SQLGuard (Req 6.4)
+    if _sql_guard is not None:
+        sql = _sql_guard.apply_row_limit(sql)
+    else:
+        # Fallback: manual LIMIT
+        sql_upper = sql.strip().upper()
+        if "LIMIT" not in sql_upper and sql_upper.startswith("SELECT"):
+            sql = f"{sql.rstrip(';')} LIMIT {limit}"
 
     try:
         from sqlalchemy import text
