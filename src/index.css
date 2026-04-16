@@ -350,6 +350,16 @@ body {
   text-align: center; font-size: 11px; color: #d1d5db;
   margin-top: 4px;
 }
+.login-switch {
+  text-align: center; font-size: 13px; color: #9ca3af;
+  margin-top: 2px;
+}
+.login-switch-btn {
+  background: none; border: none; color: #6366f1;
+  font-size: 13px; cursor: pointer; padding: 0 2px;
+  font-family: inherit;
+}
+.login-switch-btn:hover { text-decoration: underline; }
 
 /* ── Metrics 面板 ─────────────────────────── */
 .metrics-overlay {

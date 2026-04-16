@@ -18,10 +18,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from jose import JWTError
 
-from server.auth import AuthMiddleware, verify_ws_token
+from server.auth import (
+    AuthMiddleware, verify_ws_token,
+    authenticate_user, create_user, create_access_token,
+)
 from server.config import get_config, init_config
 from server.logging_config import setup_logging
-from server.models import ChatRequest, ChatResponse, RateRequest
+from server.models import ChatRequest, ChatResponse, RateRequest, LoginRequest, RegisterRequest
 from server.tracing import TraceMiddleware, get_metrics_response
 from server.agent import (
     process_message, get_session, get_all_sessions, rate_session,
@@ -78,6 +81,30 @@ app.add_middleware(
 
 
 # ── REST API ──────────────────────────────────────────
+
+@app.post("/api/register")
+async def register(req: RegisterRequest):
+    if len(req.username.strip()) < 1:
+        return JSONResponse(status_code=400, content={"detail": "用户名不能为空"})
+    if len(req.password) < 3:
+        return JSONResponse(status_code=400, content={"detail": "密码长度至少 3 位"})
+    user = create_user(req.username.strip(), req.password)
+    if not user:
+        return JSONResponse(status_code=409, content={"detail": "用户名已存在"})
+    cfg = get_config()
+    token = create_access_token(user["username"], user["role"], cfg.jwt_secret, cfg.jwt_issuer)
+    return {"token": token, "username": user["username"], "role": user["role"]}
+
+
+@app.post("/api/login")
+async def login(req: LoginRequest):
+    user = authenticate_user(req.username.strip(), req.password)
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "用户名或密码错误"})
+    cfg = get_config()
+    token = create_access_token(user["username"], user["role"], cfg.jwt_secret, cfg.jwt_issuer)
+    return {"token": token, "username": user["username"], "role": user["role"]}
+
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):

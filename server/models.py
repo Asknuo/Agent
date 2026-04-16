@@ -125,3 +125,13 @@ class ChatResponse(BaseModel):
 
 class RateRequest(BaseModel):
     rating: int = Field(ge=1, le=5)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str

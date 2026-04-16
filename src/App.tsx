@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { sendMessageStream, rateSession, fetchMetrics, ChatMetadata, MetricEntry } from './api';
+import { sendMessageStream, rateSession, fetchMetrics, loginApi, registerApi, setToken, clearAuth, getToken, ChatMetadata, MetricEntry } from './api';
 import ReactMarkdown from 'react-markdown';
 import { Tag, Rate, Tooltip, ConfigProvider } from 'antd';
 import {
@@ -50,29 +50,35 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
       setError('请输入用户名和密码');
       return;
     }
+    if (password.length < 3) {
+      setError('密码长度至少 3 位');
+      return;
+    }
     setLoading(true);
     setError('');
 
-    // 模拟登录验证：admin/admin 为管理员，其他任意用户名+密码为普通用户
-    setTimeout(() => {
-      if (password.length < 3) {
-        setError('密码长度至少 3 位');
-        setLoading(false);
-        return;
-      }
-      const role = (username === 'admin' && password === 'admin') ? 'admin' as const : 'user' as const;
-      const user: UserInfo = { username: username.trim(), role };
+    try {
+      const res = isRegister
+        ? await registerApi(username.trim(), password)
+        : await loginApi(username.trim(), password);
+
+      setToken(res.token);
+      const user: UserInfo = { username: res.username, role: res.role };
       localStorage.setItem('xiaozhi_user', JSON.stringify(user));
       onLogin(user);
+    } catch (err: any) {
+      setError(err.message || (isRegister ? '注册失败' : '登录失败'));
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -90,7 +96,7 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
             </svg>
           </div>
           <h2 className="login-title">小智 AI 客服</h2>
-          <p className="login-desc">登录后开始对话</p>
+          <p className="login-desc">{isRegister ? '创建新账号' : '登录后开始对话'}</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
           <div className="login-field">
@@ -118,9 +124,15 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
           </div>
           {error && <div className="login-error">{error}</div>}
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? '登录中...' : '登 录'}
+            {loading ? (isRegister ? '注册中...' : '登录中...') : (isRegister ? '注 册' : '登 录')}
           </button>
-          <div className="login-hint">管理员: admin / admin · 普通用户: 任意用户名</div>
+          <div className="login-switch">
+            {isRegister ? '已有账号？' : '没有账号？'}
+            <button type="button" className="login-switch-btn" onClick={() => { setIsRegister(!isRegister); setError(''); }}>
+              {isRegister ? '去登录' : '注册新账号'}
+            </button>
+          </div>
+          <div className="login-hint">管理员: admin / admin</div>
         </form>
       </div>
     </div>
@@ -567,14 +579,18 @@ export default function App() {
   const [user, setUser] = useState<UserInfo | null>(() => {
     try {
       const saved = localStorage.getItem('xiaozhi_user');
-      return saved ? JSON.parse(saved) : null;
+      const token = getToken();
+      if (saved && token) return JSON.parse(saved);
+      // 有用户信息但没 token，清除无效状态
+      if (saved && !token) localStorage.removeItem('xiaozhi_user');
+      return null;
     } catch {
       return null;
     }
   });
 
   const handleLogout = () => {
-    localStorage.removeItem('xiaozhi_user');
+    clearAuth();
     setUser(null);
   };
 

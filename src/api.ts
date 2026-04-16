@@ -1,5 +1,75 @@
-/** API 客户端 */
+/** API 客户端 — 带 JWT Token 管理 */
 const BASE = '/api';
+
+// ── Token 管理 ───────────────────────────────────────
+
+let _token: string | null = null;
+
+export function setToken(token: string | null) {
+  _token = token;
+  if (token) {
+    localStorage.setItem('xiaozhi_token', token);
+  } else {
+    localStorage.removeItem('xiaozhi_token');
+  }
+}
+
+export function getToken(): string | null {
+  if (!_token) {
+    _token = localStorage.getItem('xiaozhi_token');
+  }
+  return _token;
+}
+
+export function clearAuth() {
+  _token = null;
+  localStorage.removeItem('xiaozhi_token');
+  localStorage.removeItem('xiaozhi_user');
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+// ── 认证 API ─────────────────────────────────────────
+
+export interface AuthResponse {
+  token: string;
+  username: string;
+  role: 'user' | 'admin';
+}
+
+export async function loginApi(username: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${BASE}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '登录失败' }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function registerApi(username: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${BASE}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '注册失败' }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+
+// ── 聊天相关 ─────────────────────────────────────────
 
 export interface ChatMetadata {
   sentiment?: string;
@@ -28,10 +98,15 @@ export async function sendMessageStream(
 ): Promise<void> {
   const res = await fetch(`${BASE}/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ message, session_id: sessionId, user_id: 'web-user' }),
   });
 
+  if (res.status === 401) {
+    clearAuth();
+    window.location.reload();
+    return;
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   if (!res.body) throw new Error('No response body');
 
@@ -78,12 +153,13 @@ export async function sendMessageStream(
 export async function rateSession(sessionId: string, rating: number): Promise<void> {
   await fetch(`${BASE}/sessions/${sessionId}/rate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ rating }),
   });
 }
 
-/** 指标数据结构 */
+// ── 指标 ─────────────────────────────────────────────
+
 export interface MetricEntry {
   name: string;
   type: string;
@@ -91,7 +167,6 @@ export interface MetricEntry {
   samples: { labels: Record<string, string>; value: number }[];
 }
 
-/** 拉取并解析 /metrics 端点的 Prometheus 文本 */
 export async function fetchMetrics(): Promise<MetricEntry[]> {
   const res = await fetch('/metrics');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

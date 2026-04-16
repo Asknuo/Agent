@@ -28,7 +28,7 @@ class AppConfig(BaseModel):
     log_file: Optional[str] = None
 
     # ── 认证 ──────────────────────────────────────────
-    jwt_secret: str = ""
+    jwt_secret: str = "xiaozhi-dev-secret-key-change-in-production"
     jwt_issuer: str = "xiaozhi"
     auth_enabled: bool = False
 
