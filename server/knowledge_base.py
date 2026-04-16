@@ -14,7 +14,9 @@ RAG 知识库 — 三级检索策略 + FAISS 持久化
 
 from __future__ import annotations
 import logging
+import math
 import os
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -228,10 +230,112 @@ def _make_embeddings():
     return OpenAIEmbeddings(model=model, api_key=api_key, base_url=base_url)
 
 
+def _batch_embed(
+    texts: list[str],
+    embeddings_model: object,
+    batch_size: int = 32,
+    delay_ms: int = 100,
+    max_retries: int = 2,
+) -> list[list[float] | None]:
+    """
+    分批发送 Embedding 请求（需求 9.1, 9.2, 9.3）。
+
+    - batch_size: 每批最多文档数（默认 32）
+    - delay_ms: 批间延迟毫秒数（默认 100），避免 API 速率限制
+    - max_retries: 每批最大重试次数（默认 2），失败后跳过该批
+
+    返回与 texts 等长的向量列表，失败批次对应位置为 None。
+    """
+    all_vectors: list[list[float] | None] = []
+    total_batches = math.ceil(len(texts) / batch_size) if texts else 0
+
+    for batch_idx in range(total_batches):
+        start = batch_idx * batch_size
+        end = start + batch_size
+        batch_texts = texts[start:end]
+        batch_vectors: list[list[float]] | None = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                batch_vectors = embeddings_model.embed_documents(batch_texts)
+                break
+            except Exception as e:
+                if attempt < max_retries:
+                    retry_delay = delay_ms / 1000 * (attempt + 1)
+                    logger.warning("embedding_batch_retry", extra={"extra_fields": {
+                        "batch_index": batch_idx,
+                        "attempt": attempt + 1,
+                        "max_retries": max_retries,
+                        "error": str(e),
+                        "retry_delay_s": retry_delay,
+                    }})
+                    time.sleep(retry_delay)
+                else:
+                    logger.warning("embedding_batch_failed", extra={"extra_fields": {
+                        "batch_index": batch_idx,
+                        "batch_size": len(batch_texts),
+                        "error": str(e),
+                    }})
+
+        if batch_vectors is not None:
+            all_vectors.extend(batch_vectors)
+        else:
+            # Mark failed batch positions as None
+            all_vectors.extend([None] * len(batch_texts))
+
+        # Inter-batch delay to avoid API rate limits (需求 9.2)
+        if batch_idx < total_batches - 1 and delay_ms > 0:
+            time.sleep(delay_ms / 1000)
+
+    return all_vectors
+
+
+def _build_faiss_from_batch(docs: list, embeddings_model: object) -> Optional[object]:
+    """
+    Build a FAISS index using batch embedding instead of FAISS.from_documents.
+    Skips documents whose embedding failed (returned None).
+    """
+    from langchain_community.vectorstores import FAISS
+
+    cfg = get_config()
+    texts = [doc.page_content for doc in docs]
+    vectors = _batch_embed(
+        texts,
+        embeddings_model,
+        batch_size=cfg.embedding_batch_size,
+        delay_ms=cfg.embedding_batch_delay_ms,
+    )
+
+    # Filter out docs whose embedding failed
+    valid_docs = []
+    valid_vectors = []
+    skipped = 0
+    for doc, vec in zip(docs, vectors):
+        if vec is not None:
+            valid_docs.append(doc)
+            valid_vectors.append(vec)
+        else:
+            skipped += 1
+
+    if skipped > 0:
+        logger.warning("embedding_batch_skipped_docs", extra={"extra_fields": {
+            "skipped": skipped, "total": len(docs),
+        }})
+
+    if not valid_docs:
+        return None
+
+    # Build FAISS index from pre-computed embeddings
+    text_embeddings = list(zip([d.page_content for d in valid_docs], valid_vectors))
+    metadatas = [d.metadata for d in valid_docs]
+    vs = FAISS.from_embeddings(text_embeddings, embeddings_model, metadatas=metadatas)
+    return vs
+
+
 def _build_or_load_faiss(docs: list) -> Optional[object]:
     """
     增量构建 FAISS 索引：
-    - 首次：全量构建并保存
+    - 首次：全量构建并保存（使用批处理 embedding）
     - 文档数不变：直接从本地加载
     - 文档数增加：加载已有索引，只对新增文档做 embedding，合并后保存
     - 文档数减少或其他变化：全量重建
@@ -270,7 +374,7 @@ def _build_or_load_faiss(docs: list) -> Optional[object]:
                 return vs
 
             elif saved_ids and current_ids > saved_ids:
-                # 只有新增，增量构建
+                # 只有新增，增量构建（使用批处理 embedding）
                 new_docs = [d for d in docs if d.metadata.get("id", "") not in saved_ids]
                 logger.info("faiss_incremental_update", extra={"extra_fields": {
                     "existing": len(saved_ids), "new": len(new_docs),
@@ -281,8 +385,9 @@ def _build_or_load_faiss(docs: list) -> Optional[object]:
                     allow_dangerous_deserialization=True,
                 )
                 if new_docs:
-                    new_vs = FAISS.from_documents(new_docs, embeddings)
-                    vs.merge_from(new_vs)
+                    new_vs = _build_faiss_from_batch(new_docs, embeddings)
+                    if new_vs is not None:
+                        vs.merge_from(new_vs)
 
                     # 保存更新后的索引
                     vs.save_local(str(index_path))
@@ -302,9 +407,13 @@ def _build_or_load_faiss(docs: list) -> Optional[object]:
             logger.warning("faiss_no_documents")
             return None
 
-        # 全量构建
+        # 全量构建（使用批处理 embedding）
         logger.info("faiss_building", extra={"extra_fields": {"doc_count": len(docs)}})
-        vs = FAISS.from_documents(docs, embeddings)
+        vs = _build_faiss_from_batch(docs, embeddings)
+
+        if vs is None:
+            logger.error("faiss_build_failed_all_batches")
+            return None
 
         # 持久化
         index_path.mkdir(parents=True, exist_ok=True)

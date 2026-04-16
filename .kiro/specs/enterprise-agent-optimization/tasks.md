@@ -176,14 +176,14 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Invalidate cache on knowledge base reload
     - _Requirements: 8.1, 8.3_
 
-  - [ ]* 10.3 Write property tests for cache (Property 11, Property 12, Property 13)
+  - [x] 10.3 Write property tests for cache (Property 11, Property 12, Property 13)
     - **Property 11: Cache round trip + TTL** — get within TTL returns value, after TTL returns None
     - **Property 12: Pattern invalidation** — matching keys removed, non-matching preserved
     - **Property 13: LRU eviction** — size never exceeds max, LRU entry evicted
     - **Validates: Requirements 8.1, 8.2, 8.3, 8.4**
 
-- [ ] 11. Implement Embedding batch processing optimization
-  - [ ] 11.1 Refactor `server/knowledge_base.py` `_build_or_load_faiss` to use batch embedding
+- [x] 11. Implement Embedding batch processing optimization
+  - [x] 11.1 Refactor `server/knowledge_base.py` `_build_or_load_faiss` to use batch embedding
     - Implement `_batch_embed()` with configurable batch_size (default 32) and delay_ms (default 100)
     - Add retry logic per batch (max 2 retries), skip failed batches with WARNING log
     - Add inter-batch delay to avoid API rate limits
