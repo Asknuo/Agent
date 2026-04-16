@@ -110,11 +110,33 @@ async def _resilient_llm_invoke(llm: Any, messages: list, label: str = "llm") ->
 
 # ── Prompts ───────────────────────────────────────────
 
-SUPERVISOR_PROMPT = """你是智能客服团队的主管。分析用户消息，决定下一步：
-- "worker"：交给客服 Agent 处理（大多数情况）
-- "human"：直接转人工（仅当用户明确要求转人工时）
+SUPERVISOR_PROMPT = """你是智能客服团队的主管。分析用户消息，完成以下任务：
 
-只回复 JSON：{"next": "worker" 或 "human"}"""
+1. **路由决策**（next）：
+   - "worker"：交给客服 Agent 处理（大多数情况）
+   - "human"：直接转人工（仅当用户明确要求转人工时）
+
+2. **情绪分析**（sentiment）：判断用户情绪
+   - "positive"：积极、满意、感谢
+   - "neutral"：中性、普通咨询
+   - "negative"：不满、差评、投诉
+   - "frustrated"：焦急、等待过久、反复追问
+   - "confused"：困惑、不理解、不明白
+
+3. **意图分类**（intent）：判断用户意图
+   - "product_inquiry"：产品/价格/功能咨询
+   - "order_status"：订单/物流/配送查询
+   - "refund_request"：退款/退货请求
+   - "technical_support"：技术问题/故障报修
+   - "complaint"：投诉/举报
+   - "general_chat"：闲聊/通用对话
+   - "human_handoff"：要求转人工
+   - "feedback"：建议/反馈
+
+4. **置信度**（confidence）：对意图分类的置信度，0.0 到 1.0 之间的数值
+
+只回复 JSON，不要其他内容：
+{"next": "worker", "sentiment": "neutral", "intent": "general_chat", "confidence": 0.8}"""
 
 WORKER_PROMPT = """你是"小智"，专业友善的AI智能客服。
 
@@ -208,6 +230,70 @@ def _detect_language(text: str) -> str:
     return "zh" if len(re.findall(r"[\u4e00-\u9fff]", text)) > len(text) * 0.3 else "en"
 
 
+# ── Valid enum value sets for LLM response parsing ────
+
+_VALID_SENTIMENTS = {s.value for s in Sentiment}
+_VALID_INTENTS = {i.value for i in IntentCategory}
+
+
+def _parse_supervisor_llm_response(
+    content: str,
+) -> dict[str, Any] | None:
+    """Parse the structured JSON from the supervisor LLM response.
+
+    Returns a dict with keys ``next``, ``sentiment``, ``intent``,
+    ``confidence`` on success, or *None* when the content cannot be
+    parsed into a valid structure.
+    """
+    if not content:
+        return None
+
+    text = content.strip()
+
+    # Strip markdown code fences if present
+    if "```" in text:
+        parts = text.split("```")
+        if len(parts) >= 3:
+            text = parts[1]
+        elif len(parts) == 2:
+            text = parts[1]
+        text = text.removeprefix("json").strip()
+
+    try:
+        data = _json.loads(text)
+    except (ValueError, TypeError):
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    # Validate & normalise each field
+    next_val = str(data.get("next", "worker")).lower()
+    if next_val not in ("worker", "human"):
+        next_val = "worker"
+
+    sentiment_val = str(data.get("sentiment", "")).lower()
+    if sentiment_val not in _VALID_SENTIMENTS:
+        return None  # signal caller to fall back
+
+    intent_val = str(data.get("intent", "")).lower()
+    if intent_val not in _VALID_INTENTS:
+        return None
+
+    try:
+        confidence_val = float(data.get("confidence", 0.0))
+    except (ValueError, TypeError):
+        confidence_val = 0.0
+    confidence_val = max(0.0, min(1.0, confidence_val))
+
+    return {
+        "next": next_val,
+        "sentiment": Sentiment(sentiment_val),
+        "intent": IntentCategory(intent_val),
+        "confidence": confidence_val,
+    }
+
+
 # ── LangGraph State ──────────────────────────────────
 
 class AgentState(TypedDict):
@@ -226,7 +312,7 @@ class AgentState(TypedDict):
 
 # ── Node 1: Supervisor ───────────────────────────────
 
-_supervisor_llm = _make_llm(temperature=0.0, max_tokens=60)
+_supervisor_llm = _make_llm(temperature=0.0, max_tokens=150)
 
 
 @timed_node("supervisor")
@@ -240,31 +326,45 @@ async def supervisor_node(state: AgentState) -> dict[str, Any]:
             user_text = str(msg.content)
             break
 
-    sentiment = _analyze_sentiment(user_text)
-    intent, confidence = _classify_intent(user_text)
     language = _detect_language(user_text)
 
-    # LLM 路由 (with retry + circuit breaker)
+    # LLM-driven routing + sentiment + intent (需求 14.3: single LLM call)
+    parsed: dict[str, Any] | None = None
     try:
         resp = await _resilient_llm_invoke(
             _supervisor_llm,
             [SystemMessage(content=SUPERVISOR_PROMPT), HumanMessage(content=user_text)],
             label="supervisor",
         )
+        content = str(resp.content).strip() if resp else ""
+        parsed = _parse_supervisor_llm_response(content)
     except (RetryExhaustedError, CircuitOpenError):
-        # 降级: 使用关键词规则决定路由
-        resp = None
-    content = str(resp.content).strip() if resp else ""
+        # LLM unavailable — fall back below
+        parsed = None
 
-    next_step = "worker"
-    try:
-        if content and "```" in content:
-            content = content.split("```")[1].removeprefix("json")
-        if content:
-            next_step = _json.loads(content).get("next", "worker")
-    except Exception:
-        if intent == IntentCategory.HUMAN_HANDOFF:
-            next_step = "human"
+    if parsed is not None:
+        # LLM analysis succeeded (需求 14.1, 14.2, 14.5)
+        next_step = parsed["next"]
+        sentiment = parsed["sentiment"]
+        intent = parsed["intent"]
+        confidence = parsed["confidence"]
+        logger.info("supervisor_llm_analysis", extra={"extra_fields": {
+            "source": "llm",
+            "sentiment": sentiment.value,
+            "intent": intent.value,
+            "confidence": confidence,
+        }})
+    else:
+        # Fallback to keyword-based rules (需求 14.4)
+        sentiment = _analyze_sentiment(user_text)
+        intent, confidence = _classify_intent(user_text)
+        next_step = "human" if intent == IntentCategory.HUMAN_HANDOFF else "worker"
+        logger.info("supervisor_keyword_fallback", extra={"extra_fields": {
+            "source": "keyword",
+            "sentiment": sentiment.value,
+            "intent": intent.value,
+            "confidence": confidence,
+        }})
 
     lang_label = "中文" if language == "zh" else "English"
     ctx = SystemMessage(content=(

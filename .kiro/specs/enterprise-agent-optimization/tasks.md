@@ -263,13 +263,13 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
   - [x] 15.7 Register TenantMiddleware in `server/main.py`
     - _Requirements: 13.1_
 
-  - [ ]* 15.8 Write property tests for multi-tenant isolation (Property 19, Property 20)
+  - [x] 15.8 Write property tests for multi-tenant isolation (Property 19, Property 20)
     - **Property 19: Tenant session isolation** — sessions from tenant A not visible to tenant B
     - **Property 20: Tenant rate limit independence** — exhausting A's limit doesn't affect B
     - **Validates: Requirements 13.2, 13.5**
 
-- [ ] 16. Implement LLM-driven sentiment/intent analysis
-  - [ ] 16.1 Update Supervisor prompt and parsing in `server/agent.py`
+- [x] 16. Implement LLM-driven sentiment/intent analysis
+  - [x] 16.1 Update Supervisor prompt and parsing in `server/agent.py`
     - Replace SUPERVISOR_PROMPT with SUPERVISOR_PROMPT_V2 that returns JSON with next, sentiment, intent, confidence
     - Parse LLM JSON response to extract all four fields in a single call
     - Fallback to existing keyword-based `_analyze_sentiment` and `_classify_intent` on LLM failure
