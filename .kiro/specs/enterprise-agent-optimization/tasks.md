@@ -189,19 +189,19 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Add inter-batch delay to avoid API rate limits
     - _Requirements: 9.1, 9.2, 9.3_
 
-  - [ ]* 11.2 Write property test for batch splitting (Property 14)
+  - [x] 11.2 Write property test for batch splitting (Property 14)
     - **Property 14: Batch partitioning** — ⌈N/B⌉ batches, each ≤ B, union equals original
     - **Validates: Requirements 9.1**
 
-- [ ] 12. Implement concurrency control (`server/concurrency.py`)
-  - [ ] 12.1 Create `server/concurrency.py` with `ConcurrencyController` class
+- [x] 12. Implement concurrency control (`server/concurrency.py`)
+  - [x] 12.1 Create `server/concurrency.py` with `ConcurrencyController` class
     - Implement asyncio.Semaphore-based concurrency limiting (default max 20)
     - Implement wait queue with configurable max size (default 50)
     - Return HTTP 503 when queue is full
     - Implement per-request timeout (default 120s), return HTTP 504 on timeout
     - _Requirements: 10.1, 10.2, 10.3_
 
-  - [ ] 12.2 Integrate ConcurrencyController into `server/main.py` chat endpoints
+  - [x] 12.2 Integrate ConcurrencyController into `server/main.py` chat endpoints
     - Wrap process_message calls with concurrency controller
     - _Requirements: 10.1, 10.2_
 

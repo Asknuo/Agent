@@ -22,6 +22,7 @@ from server.auth import (
     AuthMiddleware, verify_ws_token,
     authenticate_user, create_user, create_access_token,
 )
+from server.concurrency import ConcurrencyController
 from server.config import get_config, init_config
 from server.logging_config import setup_logging
 from server.models import ChatRequest, ChatResponse, RateRequest, LoginRequest, RegisterRequest
@@ -92,6 +93,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Concurrency controller (Requirement 10.1, 10.2, 10.3)
+_concurrency = ConcurrencyController(
+    max_concurrent=_cfg.max_concurrent_requests,
+    max_queue=_cfg.max_queue_size,
+    timeout=_cfg.request_timeout,
+)
+
 
 # ── REST API ──────────────────────────────────────────
 
@@ -122,7 +130,9 @@ async def login(req: LoginRequest):
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     session_id = req.session_id or uuid.uuid4().hex
-    reply, metadata = await process_message(session_id, req.user_id, req.message)
+    reply, metadata = await _concurrency.execute(
+        process_message(session_id, req.user_id, req.message)
+    )
     return ChatResponse(session_id=session_id, reply=reply, metadata=metadata)
 
 
@@ -135,8 +145,10 @@ async def chat_stream(req: ChatRequest):
         # 发送 session_id
         yield f"data: {json.dumps({'type': 'session', 'sessionId': session_id})}\n\n"
 
-        # 运行 agent 获取完整回复
-        reply, metadata = await process_message(session_id, req.user_id, req.message)
+        # 运行 agent 获取完整回复（受并发控制保护）
+        reply, metadata = await _concurrency.execute(
+            process_message(session_id, req.user_id, req.message)
+        )
 
         # 逐块推送文本（每次 ~4 个字符，模拟打字效果）
         chunk_size = 4
