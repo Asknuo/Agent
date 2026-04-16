@@ -20,10 +20,24 @@ from typing import Any, Optional
 
 import httpx
 
+from server.cache import LRUCache, make_cache_key
 from server.config import get_config
 from server.models import KnowledgeEntry
 
 logger = logging.getLogger("knowledge_base")
+
+# ── 知识库检索缓存 ───────────────────────────────────
+
+_search_cache: LRUCache | None = None
+
+
+def _get_cache() -> LRUCache:
+    """延迟初始化缓存实例，使用全局配置的 TTL 和 max_size。"""
+    global _search_cache
+    if _search_cache is None:
+        cfg = get_config()
+        _search_cache = LRUCache(max_size=cfg.cache_max_size, ttl=cfg.cache_ttl)
+    return _search_cache
 
 # ── FAISS 索引持久化路径 ─────────────────────────────
 
@@ -377,8 +391,12 @@ _all_docs: list = []  # 切分后的 Document 列表
 
 
 def init_rag() -> None:
-    """启动时初始化：加载文件 → 切分 → 向量化 → 持久化"""
+    """启动时初始化：加载文件 → 切分 → 向量化 → 持久化。清除搜索缓存。"""
     global _knowledge_base, _id_to_entry, _vector_store, _all_docs
+
+    # 清除搜索缓存（知识库内容更新，需求 8.3）
+    cache = _get_cache()
+    cache.clear()
 
     # 1. 加载原始条目（用于关键词兜底和 API 返回）
     file_entries = _load_from_files()
@@ -406,9 +424,18 @@ def init_rag() -> None:
 # ── 统一检索入口 ─────────────────────────────────────
 
 async def search_knowledge_async(query: str, top_k: int = 3) -> list[KnowledgeEntry]:
-    """三级检索：外部 RAG → 本地 FAISS → 关键词"""
+    """三级检索：缓存 → 外部 RAG → 本地 FAISS → 关键词"""
+    cache = _get_cache()
+    cache_key = make_cache_key(f"{query}::{top_k}")
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        logger.info("search_cache_hit", extra={"extra_fields": {"query": query[:50]}})
+        return cached
+
     ext_results = await _search_external_rag(query, top_k)
     if ext_results:
+        cache.put(cache_key, ext_results)
         return ext_results
 
     if _vector_store is not None:
@@ -425,15 +452,27 @@ async def search_knowledge_async(query: str, top_k: int = 3) -> list[KnowledgeEn
                     tags=meta.get("tags", "").split(","),
                 ))
             if entries:
+                cache.put(cache_key, entries)
                 return entries
         except Exception as e:
             logger.error("faiss_search_failed", exc_info=e)
 
-    return _keyword_search(query, top_k)
+    results = _keyword_search(query, top_k)
+    if results:
+        cache.put(cache_key, results)
+    return results
 
 
 def search_knowledge(query: str, top_k: int = 3) -> list[KnowledgeEntry]:
-    """同步版本（供 @tool 调用）"""
+    """同步版本（供 @tool 调用），带缓存"""
+    cache = _get_cache()
+    cache_key = make_cache_key(f"{query}::{top_k}")
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        logger.info("search_cache_hit_sync", extra={"extra_fields": {"query": query[:50]}})
+        return cached
+
     if _vector_store is not None:
         try:
             results = _vector_store.similarity_search_with_score(query, k=top_k)
@@ -448,10 +487,15 @@ def search_knowledge(query: str, top_k: int = 3) -> list[KnowledgeEntry]:
                     tags=meta.get("tags", "").split(","),
                 ))
             if entries:
+                cache.put(cache_key, entries)
                 return entries
         except Exception:
             pass
-    return _keyword_search(query, top_k)
+
+    results = _keyword_search(query, top_k)
+    if results:
+        cache.put(cache_key, results)
+    return results
 
 
 def _keyword_search(query: str, top_k: int = 3) -> list[KnowledgeEntry]:

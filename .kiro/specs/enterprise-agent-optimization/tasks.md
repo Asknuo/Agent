@@ -155,23 +155,23 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Catch tool execution exceptions, return ToolMessage with error info to Worker
     - _Requirements: 7.2_
 
-  - [ ]* 9.5 Write property tests for retry engine (Property 8) and circuit breaker (Property 10)
+  - [x] 9.5 Write property tests for retry engine (Property 8) and circuit breaker (Property 10)
     - **Property 8: Exponential backoff** — N+1 attempts with correct delay pattern
     - **Property 10: Circuit breaker state transitions** — CLOSED→OPEN→HALF_OPEN→CLOSED
     - **Validates: Requirements 7.1, 7.4, 7.5**
 
-  - [ ]* 9.6 Write property test for tool exception handling (Property 9)
+  - [x] 9.6 Write property test for tool exception handling (Property 9)
     - **Property 9: Structured error on tool failure** — exceptions produce structured error messages
     - **Validates: Requirements 7.2**
 
-- [ ] 10. Implement cache layer (`server/cache.py`)
-  - [ ] 10.1 Create `server/cache.py` with `LRUCache` class
+- [x] 10. Implement cache layer (`server/cache.py`)
+  - [x] 10.1 Create `server/cache.py` with `LRUCache` class
     - Implement OrderedDict-based LRU with configurable max_size and TTL
     - Implement get (with TTL check), put (with eviction), invalidate_pattern methods
     - Cache key generation via SHA256 hash of query text
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-  - [ ] 10.2 Integrate cache into `server/knowledge_base.py` search functions
+  - [x] 10.2 Integrate cache into `server/knowledge_base.py` search functions
     - Cache knowledge search results with configurable TTL
     - Invalidate cache on knowledge base reload
     - _Requirements: 8.1, 8.3_
