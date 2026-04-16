@@ -61,7 +61,7 @@ tool_call_id_st = st.text(
 
 def _build_state_with_tool_call(tool_name: str, tool_call_id: str) -> dict:
     """Build a minimal AgentState with a pending tool call from an AIMessage."""
-    from server.models import Sentiment, IntentCategory
+    from server.core.models import Sentiment, IntentCategory
 
     ai_msg = AIMessage(
         content="",
@@ -116,10 +116,10 @@ def test_tool_exception_returns_structured_error(
     mock_executor.invoke.side_effect = exc_instance
 
     with (
-        patch("server.agent._tool_executor", mock_executor),
-        patch("server.agent._worker_llm", MagicMock()),  # skip _ensure_worker guard
+        patch("server.agent.engine._tool_executor", mock_executor),
+        patch("server.agent.engine._worker_llm", MagicMock()),  # skip _ensure_worker guard
     ):
-        from server.agent import tool_node
+        from server.agent.engine import tool_node
 
         result = tool_node(state)
 
@@ -169,10 +169,10 @@ def test_tool_exception_records_tool_in_tools_used(
     mock_executor.invoke.side_effect = exc_type(exc_msg)
 
     with (
-        patch("server.agent._tool_executor", mock_executor),
-        patch("server.agent._worker_llm", MagicMock()),
+        patch("server.agent.engine._tool_executor", mock_executor),
+        patch("server.agent.engine._worker_llm", MagicMock()),
     ):
-        from server.agent import tool_node
+        from server.agent.engine import tool_node
 
         result = tool_node(state)
 
@@ -202,10 +202,10 @@ def test_tool_exception_never_propagates(
     mock_executor.invoke.side_effect = exc_type(exc_msg)
 
     with (
-        patch("server.agent._tool_executor", mock_executor),
-        patch("server.agent._worker_llm", MagicMock()),
+        patch("server.agent.engine._tool_executor", mock_executor),
+        patch("server.agent.engine._worker_llm", MagicMock()),
     ):
-        from server.agent import tool_node
+        from server.agent.engine import tool_node
 
         # This must NOT raise — that's the whole point of Property 9
         try:

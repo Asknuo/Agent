@@ -32,17 +32,17 @@ from langgraph.prebuilt import ToolNode
 
 from langchain_core.messages import ToolMessage
 
-from server.circuit_breaker import CircuitBreaker, CircuitOpenError
-from server.config import get_config
-from server.logging_config import session_id_var, user_id_var
-from server.models import (
+from server.resilience.circuit_breaker import CircuitBreaker, CircuitOpenError
+from server.core.config import get_config
+from server.core.logging_config import session_id_var, user_id_var
+from server.core.models import (
     Message, MessageMetadata, Session,
     Sentiment, IntentCategory, SessionStatus,
 )
-from server.retry import RetryEngine, RetryExhaustedError
-from server.session_store import SessionStore
-from server.tools import ALL_TOOLS
-from server.tracing import TOOL_CALLS, timed_node
+from server.resilience.retry import RetryEngine, RetryExhaustedError
+from server.data.session_store import SessionStore
+from server.agent.tools import ALL_TOOLS
+from server.middleware.tracing import TOOL_CALLS, timed_node
 
 logger = logging.getLogger("agent")
 

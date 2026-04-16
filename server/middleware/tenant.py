@@ -16,8 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from server.config import get_config
-from server.logging_config import tenant_id_var
+from server.core.config import get_config
+from server.core.logging_config import tenant_id_var
 
 logger = logging.getLogger("tenant")
 

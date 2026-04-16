@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 
 sys.path.insert(0, ".")
 
-from server.knowledge_base import _batch_embed
+from server.data.knowledge_base import _batch_embed
 
 
 # ---------------------------------------------------------------------------

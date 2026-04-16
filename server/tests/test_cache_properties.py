@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 
 sys.path.insert(0, ".")
 
-from server.cache import LRUCache, make_cache_key
+from server.resilience.cache import LRUCache, make_cache_key
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ def test_get_after_ttl_returns_none(key: str, value, ttl: int) -> None:
 
     # Simulate time advancing past TTL
     future = time.time() + ttl + 1
-    with patch("server.cache.time.time", return_value=future):
+    with patch("server.resilience.cache.time.time", return_value=future):
         assert cache.get(key) is None
 
 

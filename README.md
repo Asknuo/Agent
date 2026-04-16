@@ -50,25 +50,40 @@
 
 ```
 ├── server/
-│   ├── main.py              # FastAPI 入口 · SSE 流式 · WebSocket · /metrics
-│   ├── agent.py             # LangGraph 3-Agent 引擎（Supervisor → Worker → Reviewer）
-│   ├── tools.py             # 7 个 @tool 工具（知识检索/订单/SQL/退款/工单/转人工）
-│   ├── knowledge_base.py    # RAG 三级检索（外部API → FAISS → 关键词）
-│   ├── database.py          # PostgreSQL 接入层 · SQL 安全校验
-│   ├── models.py            # Pydantic 数据模型
-│   ├── config.py            # 集中式配置管理（YAML + ENV）
-│   ├── logging_config.py    # 结构化 JSON 日志 · contextvars 链路关联
-│   ├── tracing.py           # 链路追踪中间件 · Prometheus 指标 · timed_node 装饰器
-│   └── tests/               # 属性测试（hypothesis）
+│   ├── main.py                  # FastAPI 入口 · SSE 流式 · WebSocket · /metrics
+│   ├── core/                    # 基础设施
+│   │   ├── config.py            # 集中式配置管理（YAML + ENV）
+│   │   ├── logging_config.py    # 结构化 JSON 日志 · contextvars 链路关联
+│   │   └── models.py            # Pydantic 数据模型 · 枚举 · API 请求/响应
+│   ├── agent/                   # Agent 引擎
+│   │   ├── engine.py            # LangGraph 3-Agent 引擎（Supervisor → Worker → Reviewer）
+│   │   └── tools.py             # 7 个 @tool 工具（知识检索/订单/SQL/退款/工单/转人工）
+│   ├── data/                    # 数据访问层
+│   │   ├── knowledge_base.py    # RAG 三级检索（外部API → FAISS → 关键词）
+│   │   ├── database.py          # PostgreSQL 接入层 · SQL 安全校验
+│   │   ├── session_store.py     # 会话持久化（PostgreSQL + 内存降级）
+│   │   └── sql_guard.py         # SQL 注入防护（AST 级 sqlparse 校验）
+│   ├── middleware/              # HTTP 中间件
+│   │   ├── auth.py              # JWT 认证 · 用户注册/登录
+│   │   ├── rate_limiter.py      # 滑动窗口速率限制
+│   │   ├── tracing.py           # 链路追踪 · Prometheus 指标 · timed_node 装饰器
+│   │   └── tenant.py            # 多租户中间件
+│   ├── resilience/              # 容错与性能控制
+│   │   ├── cache.py             # LRU 缓存（TTL + 模式失效）
+│   │   ├── circuit_breaker.py   # 熔断器（三态状态机）
+│   │   ├── concurrency.py       # 并发控制（Semaphore + 队列 + 超时）
+│   │   └── retry.py             # 指数退避重试引擎
+│   ├── migrations/              # SQL 迁移脚本
+│   └── tests/                   # 属性测试（hypothesis）
 ├── src/
-│   ├── App.tsx              # 聊天界面 · 元数据可视化
-│   ├── api.ts               # SSE 流式客户端
-│   └── index.css            # Tailwind 样式
+│   ├── App.tsx                  # 聊天界面 · 元数据可视化
+│   ├── api.ts                   # SSE 流式客户端
+│   └── index.css                # Tailwind 样式
 ├── data/
-│   ├── knowledge/           # 知识库文档（.txt/.md 自动加载）
-│   └── faiss_index/         # FAISS 向量索引（自动生成）
-├── config.yaml              # 运行时配置（所有项均有默认值）
-└── .env                     # 敏感配置（API Key 等）
+│   ├── knowledge/               # 知识库文档（.txt/.md 自动加载）
+│   └── faiss_index/             # FAISS 向量索引（自动生成）
+├── config.yaml                  # 运行时配置（所有项均有默认值）
+└── .env                         # 敏感配置（API Key 等）
 ```
 
 ## 快速启动

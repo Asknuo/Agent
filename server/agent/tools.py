@@ -9,8 +9,8 @@ import uuid
 
 from langchain_core.tools import tool
 
-from server.models import Ticket, TicketPriority, TicketStatus
-from server.knowledge_base import search_knowledge
+from server.core.models import Ticket, TicketPriority, TicketStatus
+from server.data.knowledge_base import search_knowledge
 
 # 内存存储
 _tickets: dict[str, Ticket] = {}
@@ -85,7 +85,7 @@ def calculate_refund(order_id: str, reason: str) -> str:
 
 # ── 数据库查询工具 ────────────────────────────────────
 
-from server.database import is_db_available, get_table_schema, execute_query
+from server.data.database import is_db_available, get_table_schema, execute_query
 
 
 @tool

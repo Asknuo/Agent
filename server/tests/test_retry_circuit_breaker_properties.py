@@ -19,8 +19,8 @@ from hypothesis import strategies as st
 
 sys.path.insert(0, ".")
 
-from server.retry import RetryEngine, RetryExhaustedError
-from server.circuit_breaker import CircuitBreaker, CircuitOpenError
+from server.resilience.retry import RetryEngine, RetryExhaustedError
+from server.resilience.circuit_breaker import CircuitBreaker, CircuitOpenError
 
 
 # ===========================================================================

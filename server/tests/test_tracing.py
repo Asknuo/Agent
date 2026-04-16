@@ -23,8 +23,8 @@ from prometheus_client import CollectorRegistry
 from starlette.testclient import TestClient
 from fastapi import FastAPI
 
-from server.logging_config import trace_id_var
-from server.tracing import (
+from server.core.logging_config import trace_id_var
+from server.middleware.tracing import (
     TraceMiddleware,
     REQUEST_COUNT,
     REQUEST_LATENCY,

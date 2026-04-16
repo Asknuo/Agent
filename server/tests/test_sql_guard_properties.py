@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 
 sys.path.insert(0, ".")
 
-from server.sql_guard import SQLGuard
+from server.data.sql_guard import SQLGuard
 
 guard = SQLGuard(max_subquery_depth=2, max_rows=50)
 

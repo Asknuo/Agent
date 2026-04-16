@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 # Ensure server package is importable
 sys.path.insert(0, ".")
 
-from server.logging_config import (
+from server.core.logging_config import (
     JSONFormatter,
     session_id_var,
     tenant_id_var,

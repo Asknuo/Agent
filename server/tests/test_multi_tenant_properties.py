@@ -17,9 +17,9 @@ from hypothesis import strategies as st
 
 sys.path.insert(0, ".")
 
-from server.models import Session, SessionStatus
-from server.session_store import SessionStore
-from server.rate_limiter import SlidingWindowRateLimiter
+from server.core.models import Session, SessionStatus
+from server.data.session_store import SessionStore
+from server.middleware.rate_limiter import SlidingWindowRateLimiter
 
 
 # ---------------------------------------------------------------------------

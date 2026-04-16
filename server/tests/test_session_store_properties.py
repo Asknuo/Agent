@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 
 sys.path.insert(0, ".")
 
-from server.models import (
+from server.core.models import (
     Message,
     MessageMetadata,
     Session,
@@ -26,7 +26,7 @@ from server.models import (
     Sentiment,
     IntentCategory,
 )
-from server.session_store import SessionStore
+from server.data.session_store import SessionStore
 
 
 # ---------------------------------------------------------------------------

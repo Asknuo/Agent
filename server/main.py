@@ -18,25 +18,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from jose import JWTError
 
-from server.auth import (
+from server.middleware.auth import (
     AuthMiddleware, verify_ws_token,
     authenticate_user, create_user, create_access_token,
 )
-from server.concurrency import ConcurrencyController
-from server.config import get_config, init_config
-from server.logging_config import setup_logging
-from server.models import ChatRequest, ChatResponse, RateRequest, LoginRequest, RegisterRequest
-from server.rate_limiter import RateLimitMiddleware, SlidingWindowRateLimiter
-from server.tracing import TraceMiddleware, get_metrics_response
-from server.tenant import TenantMiddleware
-from server.agent import (
+from server.resilience.concurrency import ConcurrencyController
+from server.core.config import get_config, init_config
+from server.core.logging_config import setup_logging
+from server.core.models import ChatRequest, ChatResponse, RateRequest, LoginRequest, RegisterRequest
+from server.middleware.rate_limiter import RateLimitMiddleware, SlidingWindowRateLimiter
+from server.middleware.tracing import TraceMiddleware, get_metrics_response
+from server.middleware.tenant import TenantMiddleware
+from server.agent.engine import (
     process_message, get_session, get_all_sessions, rate_session,
     set_session_store,
 )
-from server.knowledge_base import get_all_knowledge, init_rag
-from server.database import init_db
-from server.session_store import SessionStore
-from server.tools import get_all_tickets
+from server.data.knowledge_base import get_all_knowledge, init_rag
+from server.data.database import init_db
+from server.data.session_store import SessionStore
+from server.agent.tools import get_all_tickets
 
 logger = logging.getLogger("main")
 

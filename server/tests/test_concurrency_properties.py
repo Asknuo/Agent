@@ -18,7 +18,7 @@ from hypothesis import strategies as st
 sys.path.insert(0, ".")
 
 from fastapi import HTTPException
-from server.concurrency import ConcurrencyController
+from server.resilience.concurrency import ConcurrencyController
 
 
 # ---------------------------------------------------------------------------
