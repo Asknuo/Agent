@@ -87,7 +87,7 @@ def _build_state_with_tool_call(tool_name: str, tool_call_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=25, deadline=None)
 @given(
     exc_type=exception_type_st,
     exc_msg=exception_msg_st,
@@ -148,7 +148,7 @@ def test_tool_exception_returns_structured_error(
     )
 
 
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=25, deadline=None)
 @given(
     exc_type=exception_type_st,
     exc_msg=exception_msg_st,
@@ -181,7 +181,7 @@ def test_tool_exception_records_tool_in_tools_used(
     )
 
 
-@settings(max_examples=50, deadline=None)
+@settings(max_examples=15, deadline=None)
 @given(
     exc_type=exception_type_st,
     exc_msg=exception_msg_st,

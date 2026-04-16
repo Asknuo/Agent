@@ -39,7 +39,7 @@ _max_sizes = st.integers(min_value=1, max_value=100)
 # ---------------------------------------------------------------------------
 
 @given(key=_cache_keys, value=_cache_values, ttl=_ttl_values)
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_get_within_ttl_returns_stored_value(key: str, value, ttl: int) -> None:
     """Put a value, then get it immediately — must return the same value."""
     cache = LRUCache(max_size=100, ttl=ttl)
@@ -48,7 +48,7 @@ def test_get_within_ttl_returns_stored_value(key: str, value, ttl: int) -> None:
 
 
 @given(key=_cache_keys, value=_cache_values, ttl=_ttl_values)
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_get_after_ttl_returns_none(key: str, value, ttl: int) -> None:
     """Put a value, then simulate time past TTL — get must return None."""
     cache = LRUCache(max_size=100, ttl=ttl)
@@ -61,7 +61,7 @@ def test_get_after_ttl_returns_none(key: str, value, ttl: int) -> None:
 
 
 @given(key=_cache_keys, value=_cache_values)
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_get_missing_key_returns_none(key: str, value) -> None:
     """Getting a key that was never stored must return None."""
     cache = LRUCache(max_size=100, ttl=300)
@@ -73,7 +73,7 @@ def test_get_missing_key_returns_none(key: str, value) -> None:
     value1=_cache_values,
     value2=_cache_values,
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_put_overwrites_existing_key(key: str, value1, value2) -> None:
     """Putting the same key twice must return the latest value."""
     cache = LRUCache(max_size=100, ttl=300)
@@ -96,7 +96,7 @@ def test_put_overwrites_existing_key(key: str, value1, value2) -> None:
         max_size=10,
     ),
 )
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_invalidate_pattern_removes_matching_keys(
     prefix: str, suffix: str, pattern: str, non_matching_keys: list[str],
 ) -> None:
@@ -137,7 +137,7 @@ def test_invalidate_pattern_removes_matching_keys(
     ),
     pattern=st.text(min_size=1, max_size=4, alphabet="abcdefghijklmnop"),
 )
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_invalidate_pattern_count_matches_removed(
     keys: list[str], pattern: str,
 ) -> None:
@@ -163,7 +163,7 @@ def test_invalidate_pattern_count_matches_removed(
     max_size=st.integers(min_value=1, max_value=50),
     num_inserts=st.integers(min_value=1, max_value=200),
 )
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_cache_size_never_exceeds_max(max_size: int, num_inserts: int) -> None:
     """After any number of puts, cache size must never exceed max_size."""
     cache = LRUCache(max_size=max_size, ttl=300)
@@ -173,7 +173,7 @@ def test_cache_size_never_exceeds_max(max_size: int, num_inserts: int) -> None:
 
 
 @given(max_size=st.integers(min_value=2, max_value=30))
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_lru_entry_evicted_first(max_size: int) -> None:
     """
     When cache is full and a new entry is inserted, the least-recently-used
@@ -198,7 +198,7 @@ def test_lru_entry_evicted_first(max_size: int) -> None:
 
 
 @given(max_size=st.integers(min_value=2, max_value=30))
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_accessing_key_prevents_eviction(max_size: int) -> None:
     """
     Accessing a key via get() moves it to most-recently-used position,

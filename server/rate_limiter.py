@@ -85,10 +85,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path not in RATE_LIMITED_PATHS:
             return await call_next(request)
 
-        # 限制键：优先 user_id，回退 IP（需求 5.1）
-        key = getattr(request.state, "user_id", None) or (
+        # 限制键：{tenant_id}:{user_id}，回退 {tenant_id}:IP（需求 5.1, 13.5）
+        tenant_id = getattr(request.state, "tenant_id", "default") or "default"
+        user_id = getattr(request.state, "user_id", None) or (
             request.client.host if request.client else "unknown"
         )
+        key = f"{tenant_id}:{user_id}"
 
         allowed, retry_after = self.limiter.is_allowed(key)
 

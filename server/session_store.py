@@ -117,7 +117,7 @@ class SessionStore:
                     """,
                     session.id,
                     session.user_id,
-                    getattr(session, "tenant_id", "default"),
+                    session.tenant_id,
                     messages_json,
                     context_json,
                     session.status.value,
@@ -184,7 +184,7 @@ class SessionStore:
 
         # Merge fallback entries for the same user/tenant
         for s in self._fallback.values():
-            if s.user_id == user_id and getattr(s, "tenant_id", "default") == tenant_id:
+            if s.user_id == user_id and s.tenant_id == tenant_id:
                 sessions.setdefault(s.id, s)
 
         return list(sessions.values())
@@ -234,16 +234,22 @@ class SessionStore:
                 s.updated_at = time.time()
             return False
 
-    async def get_all(self) -> list[Session]:
-        """Return all sessions (for admin listing)."""
+    async def get_all(self, tenant_id: str | None = None) -> list[Session]:
+        """Return all sessions, optionally filtered by tenant_id (for admin listing)."""
         sessions: dict[str, Session] = {}
 
         if self._db_available:
             try:
                 async with self._pool.acquire() as conn:
-                    rows = await conn.fetch(
-                        "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 200",
-                    )
+                    if tenant_id is not None:
+                        rows = await conn.fetch(
+                            "SELECT * FROM sessions WHERE tenant_id = $1 ORDER BY updated_at DESC LIMIT 200",
+                            tenant_id,
+                        )
+                    else:
+                        rows = await conn.fetch(
+                            "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 200",
+                        )
                 for row in rows:
                     s = self._row_to_session(row)
                     sessions[s.id] = s
@@ -251,7 +257,8 @@ class SessionStore:
                 logger.error("session_get_all_failed", exc_info=exc)
 
         for s in self._fallback.values():
-            sessions.setdefault(s.id, s)
+            if tenant_id is None or s.tenant_id == tenant_id:
+                sessions.setdefault(s.id, s)
 
         return list(sessions.values())
 
@@ -301,6 +308,7 @@ class SessionStore:
         return Session(
             id=row["id"],
             user_id=row["user_id"],
+            tenant_id=row.get("tenant_id", "default") if hasattr(row, "get") else getattr(row, "tenant_id", "default"),
             messages=messages,
             context=context,
             status=SessionStatus(row["status"]),

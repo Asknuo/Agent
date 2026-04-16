@@ -47,14 +47,45 @@ KNOWLEDGE_DIR = Path(__file__).parent.parent / "data" / "knowledge"
 FAISS_INDEX_DIR = Path(__file__).parent.parent / "data" / "faiss_index"
 
 
+def _get_knowledge_dir(tenant_id: str | None = None) -> Path:
+    """
+    Return the knowledge directory for a given tenant (Requirement 13.3).
+
+    Resolution:
+      1. data/knowledge/{tenant_id}/ — if tenant_id is provided and the dir exists
+      2. data/knowledge/             — default fallback
+    """
+    if tenant_id and tenant_id != "default":
+        tenant_dir = KNOWLEDGE_DIR.parent / "knowledge" / tenant_id
+        if tenant_dir.exists():
+            return tenant_dir
+    return KNOWLEDGE_DIR
+
+
+def get_tenant_knowledge_dir(tenant_id: str | None = None) -> Path:
+    """
+    Resolve the knowledge directory for a given tenant (需求 13.3).
+
+    - If tenant_id is provided and a directory data/knowledge/{tenant_id}/ exists,
+      use that directory.
+    - Otherwise fall back to the default data/knowledge/ directory.
+    """
+    if tenant_id and tenant_id != "default":
+        tenant_dir = Path(__file__).parent.parent / "data" / "knowledge" / tenant_id
+        if tenant_dir.is_dir():
+            return tenant_dir
+    return KNOWLEDGE_DIR
+
+
 # ── 从文件加载（原始条目，用于关键词兜底） ──────────────
 
-def _load_from_files() -> list[KnowledgeEntry]:
-    """从 data/knowledge/ 加载 .txt/.md 文件为 KnowledgeEntry"""
+def _load_from_files(knowledge_dir: Path | None = None) -> list[KnowledgeEntry]:
+    """从指定目录（默认 data/knowledge/）加载 .txt/.md 文件为 KnowledgeEntry"""
+    target_dir = knowledge_dir or KNOWLEDGE_DIR
     entries: list[KnowledgeEntry] = []
-    if not KNOWLEDGE_DIR.exists():
+    if not target_dir.exists():
         return entries
-    for i, fp in enumerate(sorted(KNOWLEDGE_DIR.glob("*"))):
+    for i, fp in enumerate(sorted(target_dir.glob("*"))):
         if fp.suffix.lower() not in (".txt", ".md"):
             continue
         try:
@@ -81,7 +112,7 @@ def _load_from_files() -> list[KnowledgeEntry]:
 
 # ── 文档切分 + FAISS 向量化 ──────────────────────────
 
-def _load_and_split_documents() -> list:
+def _load_and_split_documents(knowledge_dir: Path | None = None) -> list:
     """
     加载所有知识文件，用 RecursiveCharacterTextSplitter 切分。
     切分策略：
@@ -110,10 +141,11 @@ def _load_and_split_documents() -> list:
         ))
 
     # 2. 文件知识 — 切分长文档
-    if not KNOWLEDGE_DIR.exists():
+    target_dir = knowledge_dir or KNOWLEDGE_DIR
+    if not target_dir.exists():
         return all_docs
 
-    for fp in sorted(KNOWLEDGE_DIR.glob("*")):
+    for fp in sorted(target_dir.glob("*")):
         if fp.suffix.lower() not in (".txt", ".md"):
             continue
         try:
@@ -499,24 +531,28 @@ _vector_store: Optional[object] = None
 _all_docs: list = []  # 切分后的 Document 列表
 
 
-def init_rag() -> None:
+def init_rag(tenant_id: str | None = None) -> None:
     """启动时初始化：加载文件 → 切分 → 向量化 → 持久化。清除搜索缓存。"""
     global _knowledge_base, _id_to_entry, _vector_store, _all_docs
+
+    knowledge_dir = _get_knowledge_dir(tenant_id)
 
     # 清除搜索缓存（知识库内容更新，需求 8.3）
     cache = _get_cache()
     cache.clear()
 
     # 1. 加载原始条目（用于关键词兜底和 API 返回）
-    file_entries = _load_from_files()
+    file_entries = _load_from_files(knowledge_dir)
     _knowledge_base = file_entries
     _id_to_entry = {e.id: e for e in _knowledge_base}
     logger.info("knowledge_base_loaded", extra={"extra_fields": {
         "total_entries": len(_knowledge_base), "file_entries": len(file_entries),
+        "knowledge_dir": str(knowledge_dir),
+        "tenant_id": tenant_id or "default",
     }})
 
     # 2. 切分文档
-    _all_docs = _load_and_split_documents()
+    _all_docs = _load_and_split_documents(knowledge_dir)
     logger.info("documents_split", extra={"extra_fields": {"chunk_count": len(_all_docs)}})
 
     # 3. 构建/加载 FAISS 索引

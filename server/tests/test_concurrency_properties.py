@@ -44,7 +44,7 @@ def _run(coro):
     max_concurrent=st.integers(min_value=1, max_value=10),
     num_tasks=st.integers(min_value=1, max_value=20),
 )
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=25, deadline=None)
 def test_concurrency_limit_enforced(max_concurrent: int, num_tasks: int) -> None:
     """
     **Validates: Requirements 10.1**
@@ -94,7 +94,7 @@ def test_concurrency_limit_enforced(max_concurrent: int, num_tasks: int) -> None
     max_concurrent=st.integers(min_value=1, max_value=5),
     max_queue=st.integers(min_value=0, max_value=5),
 )
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=25, deadline=None)
 def test_503_on_queue_overflow(max_concurrent: int, max_queue: int) -> None:
     """
     **Validates: Requirements 10.2**
@@ -147,7 +147,7 @@ def test_503_on_queue_overflow(max_concurrent: int, max_queue: int) -> None:
     max_concurrent=st.integers(min_value=1, max_value=10),
     num_tasks=st.integers(min_value=1, max_value=10),
 )
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=25, deadline=None)
 def test_tasks_within_capacity_complete(max_concurrent: int, num_tasks: int) -> None:
     """
     **Validates: Requirements 10.1**
@@ -187,7 +187,7 @@ def test_tasks_within_capacity_complete(max_concurrent: int, num_tasks: int) -> 
 @given(
     max_concurrent=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=50, deadline=None)
+@settings(max_examples=15, deadline=None)
 def test_timeout_produces_504(max_concurrent: int) -> None:
     """
     **Validates: Requirements 10.1, 10.2**

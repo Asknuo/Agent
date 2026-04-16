@@ -230,37 +230,37 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Update `process_message` to persist messages after each exchange
     - _Requirements: 3.2, 3.3_
 
-  - [ ]* 14.4 Write property tests for session persistence (Property 3, Property 4)
+  - [x] 14.4 Write property tests for session persistence (Property 3, Property 4)
     - **Property 3: Session round trip** — save then load produces equivalent session
     - **Property 4: User query completeness** — list_by_user returns all and only that user's sessions
     - **Validates: Requirements 3.3, 3.5**
 
-- [ ] 15. Implement multi-tenant support (`server/tenant.py`)
-  - [ ] 15.1 Create `server/tenant.py` with `TenantMiddleware`
+- [x] 15. Implement multi-tenant support (`server/tenant.py`)
+  - [x] 15.1 Create `server/tenant.py` with `TenantMiddleware`
     - Extract tenant_id from X-Tenant-ID header or JWT payload or default
     - Set tenant_id in contextvars and request.state
     - _Requirements: 13.1, 13.4_
 
-  - [ ] 15.2 Add tenant_id field to Session model in `server/models.py`
+  - [x] 15.2 Add tenant_id field to Session model in `server/models.py`
     - _Requirements: 13.1_
 
-  - [ ] 15.3 Update SessionStore queries to filter by tenant_id
+  - [x] 15.3 Update SessionStore queries to filter by tenant_id
     - Add WHERE tenant_id = $1 to all session queries
     - _Requirements: 13.2_
 
-  - [ ] 15.4 Update RAG pipeline to support per-tenant knowledge directories
+  - [x] 15.4 Update RAG pipeline to support per-tenant knowledge directories
     - Load knowledge from `data/knowledge/{tenant_id}/` when configured
     - Fall back to default `data/knowledge/` directory
     - _Requirements: 13.3_
 
-  - [ ] 15.5 Update rate limiter to use `{tenant_id}:{user_id}` as limiting key
+  - [x] 15.5 Update rate limiter to use `{tenant_id}:{user_id}` as limiting key
     - Support per-tenant rate limit configuration via tenant_configs table
     - _Requirements: 13.5_
 
-  - [ ] 15.6 Create tenant_configs database table migration
+  - [x] 15.6 Create tenant_configs database table migration
     - _Requirements: 13.5_
 
-  - [ ] 15.7 Register TenantMiddleware in `server/main.py`
+  - [x] 15.7 Register TenantMiddleware in `server/main.py`
     - _Requirements: 13.1_
 
   - [ ]* 15.8 Write property tests for multi-tenant isolation (Property 19, Property 20)

@@ -28,6 +28,7 @@ from server.logging_config import setup_logging
 from server.models import ChatRequest, ChatResponse, RateRequest, LoginRequest, RegisterRequest
 from server.rate_limiter import RateLimitMiddleware, SlidingWindowRateLimiter
 from server.tracing import TraceMiddleware, get_metrics_response
+from server.tenant import TenantMiddleware
 from server.agent import (
     process_message, get_session, get_all_sessions, rate_session,
     set_session_store,
@@ -72,9 +73,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="小智 AI 智能客服", version="1.0.0", lifespan=lifespan)
 
 # Middleware execution order (outermost → innermost):
-#   CORS → Auth → RateLimit → Trace → ... → route handler
+#   CORS → Auth → RateLimit → Trace → Tenant → route handler
 # Starlette processes in reverse registration order, so register innermost first.
 
+app.add_middleware(TenantMiddleware)
 app.add_middleware(TraceMiddleware)
 
 _cfg = get_config()

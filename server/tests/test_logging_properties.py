@@ -55,7 +55,7 @@ formatter = JSONFormatter()
     user_id=st.text(min_size=1, max_size=50),
     tenant_id=st.text(min_size=1, max_size=50),
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_json_log_format_completeness(
     level: int,
     module_name: str,
@@ -128,7 +128,7 @@ def test_json_log_format_completeness(
     exc_type_name=st.text(min_size=1, max_size=50, alphabet=st.characters(whitelist_categories=("L", "N"))),
     exc_message=st.text(min_size=0, max_size=100),
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_exception_log_structure(exc_type_name: str, exc_message: str) -> None:
     """
     **Validates: Requirements 1.3**

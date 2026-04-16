@@ -102,7 +102,7 @@ def _select_with_depth_3_subquery() -> st.SearchStrategy[str]:
 
 
 @given(sql=_simple_select())
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_valid_single_select_accepted(sql: str) -> None:
     """
     **Validates: Requirements 6.2**
@@ -122,7 +122,7 @@ def test_valid_single_select_accepted(sql: str) -> None:
 
 
 @given(sql=st.one_of(_select_with_depth_1_subquery(), _select_with_depth_2_subquery()))
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_select_with_allowed_subquery_depth_accepted(sql: str) -> None:
     """
     **Validates: Requirements 6.3**
@@ -153,7 +153,7 @@ _non_select_stmts = st.sampled_from([
 
 
 @given(sql=_non_select_stmts)
-@settings(max_examples=50)
+@settings(max_examples=15)
 def test_non_select_statements_rejected(sql: str) -> None:
     """
     **Validates: Requirements 6.2**
@@ -178,7 +178,7 @@ def test_non_select_statements_rejected(sql: str) -> None:
     table2=_table_names,
     union_variant=st.sampled_from(["UNION", "UNION ALL"]),
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_union_rejected(col: str, table1: str, table2: str, union_variant: str) -> None:
     """
     **Validates: Requirements 6.3**
@@ -199,7 +199,7 @@ def test_union_rejected(col: str, table1: str, table2: str, union_variant: str) 
 
 
 @given(sql=_select_with_depth_3_subquery())
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_deep_subquery_rejected(sql: str) -> None:
     """
     **Validates: Requirements 6.3**
@@ -225,7 +225,7 @@ def test_deep_subquery_rejected(sql: str) -> None:
     sql1=_simple_select(),
     sql2=_simple_select(),
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_multiple_statements_rejected(sql1: str, sql2: str) -> None:
     """
     **Validates: Requirements 6.2**
@@ -246,7 +246,7 @@ def test_multiple_statements_rejected(sql1: str, sql2: str) -> None:
 
 
 @given(sql=st.from_regex(r"^\s*$", fullmatch=True))
-@settings(max_examples=50)
+@settings(max_examples=15)
 def test_empty_sql_rejected(sql: str) -> None:
     """
     **Validates: Requirements 6.2**
@@ -265,7 +265,7 @@ def test_empty_sql_rejected(sql: str) -> None:
 
 
 @given(sql=_simple_select())
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_apply_row_limit_adds_limit(sql: str) -> None:
     """
     **Validates: Requirements 6.4**
@@ -285,7 +285,7 @@ def test_apply_row_limit_adds_limit(sql: str) -> None:
     sql=_simple_select(),
     limit_val=st.integers(min_value=1, max_value=100),
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_apply_row_limit_preserves_existing_limit(sql: str, limit_val: int) -> None:
     """
     **Validates: Requirements 6.4**

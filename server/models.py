@@ -82,6 +82,7 @@ class SessionContext(BaseModel):
 class Session(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     user_id: str = "anonymous"
+    tenant_id: str = "default"
     messages: list[Message] = Field(default_factory=list)
     context: SessionContext = Field(default_factory=SessionContext)
     created_at: float = Field(default_factory=time.time)

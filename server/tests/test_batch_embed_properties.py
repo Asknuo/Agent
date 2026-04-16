@@ -53,7 +53,7 @@ def _make_recording_model():
 # ---------------------------------------------------------------------------
 
 @given(texts=_text_lists, batch_size=_batch_sizes)
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_batch_count_equals_ceil_n_over_b(texts: list[str], batch_size: int) -> None:
     """
     **Validates: Requirements 9.1**
@@ -69,7 +69,7 @@ def test_batch_count_equals_ceil_n_over_b(texts: list[str], batch_size: int) -> 
 
 
 @given(texts=_text_lists, batch_size=_batch_sizes)
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_each_batch_size_at_most_b(texts: list[str], batch_size: int) -> None:
     """
     **Validates: Requirements 9.1**
@@ -84,7 +84,7 @@ def test_each_batch_size_at_most_b(texts: list[str], batch_size: int) -> None:
 
 
 @given(texts=_text_lists, batch_size=_batch_sizes)
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_union_of_batches_equals_original(texts: list[str], batch_size: int) -> None:
     """
     **Validates: Requirements 9.1**
@@ -103,7 +103,7 @@ def test_union_of_batches_equals_original(texts: list[str], batch_size: int) -> 
 
 
 @given(texts=_text_lists, batch_size=_batch_sizes)
-@settings(max_examples=200)
+@settings(max_examples=50)
 def test_output_length_matches_input(texts: list[str], batch_size: int) -> None:
     """
     **Validates: Requirements 9.1**

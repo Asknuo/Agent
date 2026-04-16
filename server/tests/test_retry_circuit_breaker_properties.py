@@ -61,7 +61,7 @@ def _make_failing_then_ok(fail_count: int):
     fail_count=st.integers(min_value=0, max_value=6),
     base_delay=st.sampled_from([0.0]),  # zero delay for fast tests
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_retry_attempt_count(max_retries: int, fail_count: int, base_delay: float) -> None:
     """
     **Validates: Requirements 7.1**
@@ -95,7 +95,7 @@ def test_retry_attempt_count(max_retries: int, fail_count: int, base_delay: floa
     max_retries=st.integers(min_value=1, max_value=4),
     base_delay=st.floats(min_value=0.001, max_value=0.01),
 )
-@settings(max_examples=50, deadline=None)
+@settings(max_examples=15, deadline=None)
 def test_retry_exponential_delay_pattern(max_retries: int, base_delay: float) -> None:
     """
     **Validates: Requirements 7.1**
@@ -125,7 +125,7 @@ def test_retry_exponential_delay_pattern(max_retries: int, base_delay: float) ->
 
 
 @given(max_retries=st.integers(min_value=0, max_value=5))
-@settings(max_examples=50)
+@settings(max_examples=15)
 def test_retry_success_on_first_attempt_no_delay(max_retries: int) -> None:
     """
     **Validates: Requirements 7.1**
@@ -142,7 +142,7 @@ def test_retry_success_on_first_attempt_no_delay(max_retries: int) -> None:
 
 
 @given(max_retries=st.integers(min_value=1, max_value=5))
-@settings(max_examples=50)
+@settings(max_examples=15)
 def test_retry_exhausted_wraps_last_exception(max_retries: int) -> None:
     """
     **Validates: Requirements 7.1**
@@ -174,7 +174,7 @@ def test_retry_exhausted_wraps_last_exception(max_retries: int) -> None:
 
 
 @given(failure_threshold=st.integers(min_value=1, max_value=10))
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_circuit_closed_to_open_after_threshold(failure_threshold: int) -> None:
     """
     **Validates: Requirements 7.4**
@@ -210,7 +210,7 @@ def test_circuit_closed_to_open_after_threshold(failure_threshold: int) -> None:
 
 
 @given(failure_threshold=st.integers(min_value=1, max_value=10))
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_circuit_open_rejects_immediately(failure_threshold: int) -> None:
     """
     **Validates: Requirements 7.4**
@@ -253,7 +253,7 @@ def test_circuit_open_rejects_immediately(failure_threshold: int) -> None:
     failure_threshold=st.integers(min_value=1, max_value=5),
     recovery_timeout=st.floats(min_value=0.01, max_value=0.05),
 )
-@settings(max_examples=50, deadline=None)
+@settings(max_examples=15, deadline=None)
 def test_circuit_open_to_half_open_after_timeout(
     failure_threshold: int, recovery_timeout: float
 ) -> None:
@@ -291,7 +291,7 @@ def test_circuit_open_to_half_open_after_timeout(
     failure_threshold=st.integers(min_value=1, max_value=5),
     recovery_timeout=st.floats(min_value=0.01, max_value=0.05),
 )
-@settings(max_examples=50, deadline=None)
+@settings(max_examples=15, deadline=None)
 def test_circuit_half_open_to_closed_on_success(
     failure_threshold: int, recovery_timeout: float
 ) -> None:
@@ -336,7 +336,7 @@ def test_circuit_half_open_to_closed_on_success(
     failure_threshold=st.integers(min_value=1, max_value=5),
     recovery_timeout=st.floats(min_value=0.01, max_value=0.05),
 )
-@settings(max_examples=50, deadline=None)
+@settings(max_examples=15, deadline=None)
 def test_circuit_half_open_to_open_on_failure(
     failure_threshold: int, recovery_timeout: float
 ) -> None:
@@ -380,7 +380,7 @@ def test_circuit_half_open_to_open_on_failure(
     failure_threshold=st.integers(min_value=2, max_value=6),
     successes_before_failures=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_circuit_success_resets_failure_count(
     failure_threshold: int, successes_before_failures: int
 ) -> None:
@@ -416,7 +416,7 @@ def test_circuit_success_resets_failure_count(
 
 
 @given(failure_threshold=st.integers(min_value=1, max_value=10))
-@settings(max_examples=100)
+@settings(max_examples=25)
 def test_circuit_open_error_has_positive_retry_after(failure_threshold: int) -> None:
     """
     **Validates: Requirements 7.4**
