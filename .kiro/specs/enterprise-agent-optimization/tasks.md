@@ -299,19 +299,19 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Verify event format and ordering
     - _Requirements: 15.1, 15.3_
 
-- [ ] 19. Implement frontend message reliability (`src/api.ts`, `src/App.tsx`)
-  - [ ] 19.1 Add message status tracking and retry logic in `src/App.tsx`
+- [x] 19. Implement frontend message reliability (`src/api.ts`, `src/App.tsx`)
+  - [x] 19.1 Add message status tracking and retry logic in `src/App.tsx`
     - Add `status` field ('sending' | 'sent' | 'failed') to ChatMessage interface
     - Show failure indicator and retry button on failed messages
     - Implement retry handler that resends original message content
     - _Requirements: 12.1, 12.2_
 
-  - [ ] 19.2 Implement localStorage persistence in `src/App.tsx`
+  - [x] 19.2 Implement localStorage persistence in `src/App.tsx`
     - Save session messages to localStorage on each update
     - Restore messages from localStorage on page load
     - _Requirements: 12.3, 12.4_
 
-  - [ ] 19.3 Add SSE auto-reconnect logic in `src/api.ts`
+  - [x] 19.3 Add SSE auto-reconnect logic in `src/api.ts`
     - Retry SSE connection on failure: 3 second delay, max 3 retries
     - _Requirements: 12.5_
 

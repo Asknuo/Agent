@@ -453,3 +453,48 @@ body {
 .metrics-raw-labels { color: #6b7280; font-family: monospace; font-size: 11px; }
 .metrics-raw-value { font-weight: 600; color: #4338ca; }
 .metrics-raw-more { font-size: 11px; color: #d1d5db; text-align: center; padding-top: 4px; }
+
+/* ── 消息状态：失败 & 重发 ────────────────── */
+.msg-failed {
+  opacity: 0.7;
+}
+.msg-row-user .msg-failed {
+  background: linear-gradient(135deg, #ef4444, #f87171);
+}
+.msg-fail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+.msg-fail-icon {
+  color: #ef4444;
+  font-size: 13px;
+}
+.msg-fail-text {
+  color: #ef4444;
+  font-size: 12px;
+}
+.msg-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.msg-retry-btn:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+.msg-retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

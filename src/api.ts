@@ -87,7 +87,11 @@ export interface ChatResponse {
   metadata: ChatMetadata;
 }
 
-/** 流式发送消息，通过回调逐块接收 */
+/** SSE 重连配置 */
+const SSE_RETRY_DELAY_MS = 3000;
+const SSE_MAX_RETRIES = 3;
+
+/** 流式发送消息，通过回调逐块接收，支持自动重连 */
 export async function sendMessageStream(
   message: string,
   sessionId: string | undefined,
@@ -96,56 +100,72 @@ export async function sendMessageStream(
   onMetadata: (meta: ChatMetadata) => void,
   onDone: () => void,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/chat/stream`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ message, session_id: sessionId, user_id: 'web-user' }),
-  });
+  let attempt = 0;
 
-  if (res.status === 401) {
-    clearAuth();
-    window.location.reload();
-    return;
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  if (!res.body) throw new Error('No response body');
+  while (attempt <= SSE_MAX_RETRIES) {
+    try {
+      const res = await fetch(`${BASE}/chat/stream`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ message, session_id: sessionId, user_id: 'web-user' }),
+      });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const raw = line.slice(6).trim();
-      if (!raw) continue;
-
-      try {
-        const evt = JSON.parse(raw);
-        switch (evt.type) {
-          case 'session':
-            onSessionId(evt.sessionId);
-            break;
-          case 'chunk':
-            onChunk(evt.content);
-            break;
-          case 'metadata':
-            onMetadata(evt.metadata);
-            break;
-          case 'done':
-            onDone();
-            break;
-        }
-      } catch {
-        // ignore malformed lines
+      if (res.status === 401) {
+        clearAuth();
+        window.location.reload();
+        return;
       }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.body) throw new Error('No response body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          try {
+            const evt = JSON.parse(raw);
+            switch (evt.type) {
+              case 'session':
+                onSessionId(evt.sessionId);
+                break;
+              case 'chunk':
+                onChunk(evt.content);
+                break;
+              case 'metadata':
+                onMetadata(evt.metadata);
+                break;
+              case 'done':
+                onDone();
+                break;
+            }
+          } catch {
+            // ignore malformed lines
+          }
+        }
+      }
+
+      // Stream completed successfully
+      return;
+    } catch (err) {
+      attempt++;
+      if (attempt > SSE_MAX_RETRIES) {
+        throw err;
+      }
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, SSE_RETRY_DELAY_MS));
     }
   }
 }

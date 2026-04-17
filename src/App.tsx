@@ -5,6 +5,7 @@ import { Tag, Rate, Tooltip, ConfigProvider } from 'antd';
 import {
   SendOutlined, ReloadOutlined, ClockCircleOutlined, ToolOutlined,
   DashboardOutlined, LogoutOutlined, UserOutlined, LockOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 
 interface ChatMessage {
@@ -13,6 +14,35 @@ interface ChatMessage {
   content: string;
   timestamp: number;
   metadata?: ChatMetadata;
+  status?: 'sending' | 'sent' | 'failed';
+}
+
+// ── localStorage 持久化 ──────────────────────────────
+
+const SESSION_STORAGE_KEY = 'xiaozhi_session';
+
+function saveSessionToStorage(sessionId: string | undefined, messages: ChatMessage[]) {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ sessionId, messages }));
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+function loadSessionFromStorage(): { sessionId: string | undefined; messages: ChatMessage[] } | null {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.messages)) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSessionStorage() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
 interface UserInfo {
@@ -320,10 +350,16 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
 // ── 聊天主界面 ───────────────────────────────────────
 
 function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = loadSessionFromStorage();
+    return saved ? saved.messages : [];
+  });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | undefined>();
+  const [sessionId, setSessionId] = useState<string | undefined>(() => {
+    const saved = loadSessionFromStorage();
+    return saved?.sessionId;
+  });
   const [rated, setRated] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -335,33 +371,80 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
 
   useEffect(scrollToBottom, [messages, loading, scrollToBottom]);
 
-  const handleSend = async (text?: string) => {
-    const msg = text || input.trim();
-    if (!msg || loading) return;
+  // Persist messages to localStorage on every update
+  useEffect(() => {
+    saveSessionToStorage(sessionId, messages);
+  }, [messages, sessionId]);
 
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: msg, timestamp: Date.now() };
-    const botId = crypto.randomUUID();
-    setMessages(prev => [...prev, userMsg]);
+  const doSend = async (text: string, retryMsgId?: string) => {
+    if (!text || loading) return;
+
+    let userMsg: ChatMessage;
+    if (retryMsgId) {
+      // Retry: update existing user message status to sending
+      setMessages(prev => prev.map(m => m.id === retryMsgId ? { ...m, status: 'sending' } : m));
+      userMsg = messages.find(m => m.id === retryMsgId)!;
+    } else {
+      userMsg = { id: crypto.randomUUID(), role: 'user', content: text, timestamp: Date.now(), status: 'sending' };
+      setMessages(prev => [...prev, userMsg]);
+    }
+
     setInput('');
     setLoading(true);
 
-    const botMsg: ChatMessage = { id: botId, role: 'assistant', content: '', timestamp: Date.now() };
+    const botId = retryMsgId
+      ? (() => {
+          // Find the bot message right after the retried user message and remove it
+          const idx = messages.findIndex(m => m.id === retryMsgId);
+          const nextBot = idx >= 0 && idx + 1 < messages.length && messages[idx + 1].role === 'assistant'
+            ? messages[idx + 1].id : null;
+          if (nextBot) {
+            setMessages(prev => prev.filter(m => m.id !== nextBot));
+          }
+          return crypto.randomUUID();
+        })()
+      : crypto.randomUUID();
+
+    const botMsg: ChatMessage = { id: botId, role: 'assistant', content: '', timestamp: Date.now(), status: 'sending' };
     setMessages(prev => [...prev, botMsg]);
 
     try {
       await sendMessageStream(
-        msg, sessionId,
+        text, sessionId,
         sid => { if (!sessionId) setSessionId(sid); },
         chunk => setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: m.content + chunk } : m)),
         meta => setMessages(prev => prev.map(m => m.id === botId ? { ...m, metadata: meta } : m)),
-        () => setLoading(false),
+        () => {
+          setMessages(prev => prev.map(m => {
+            if (m.id === (retryMsgId || userMsg.id)) return { ...m, status: 'sent' as const };
+            if (m.id === botId) return { ...m, status: 'sent' as const };
+            return m;
+          }));
+          setLoading(false);
+        },
       );
     } catch {
-      setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: '抱歉，服务暂时不可用，请稍后再试。' } : m));
+      setMessages(prev => prev.map(m => {
+        if (m.id === (retryMsgId || userMsg.id)) return { ...m, status: 'failed' as const };
+        if (m.id === botId) return { ...m, content: '抱歉，服务暂时不可用，请稍后再试。', status: 'failed' as const };
+        return m;
+      }));
       setLoading(false);
     } finally {
       inputRef.current?.focus();
     }
+  };
+
+  const handleSend = async (text?: string) => {
+    const msg = text || input.trim();
+    if (!msg || loading) return;
+    await doSend(msg);
+  };
+
+  const handleRetry = (msgId: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg || msg.role !== 'user' || loading) return;
+    doSend(msg.content, msgId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -376,6 +459,7 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
 
   const handleReset = () => {
     setMessages([]); setSessionId(undefined); setRated(false);
+    clearSessionStorage();
   };
 
   const showRating = !loading && !rated && sessionId && messages.filter(m => m.role === 'user').length >= 2;
@@ -476,11 +560,25 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
                     <div key={msg.id} className={`msg-row ${isUser ? 'msg-row-user' : 'msg-row-bot'}`}>
                       {!isUser && botIcon}
                       <div className={`msg-col ${isUser ? 'msg-col-user' : ''}`}>
-                        <div className={`msg-content ${isUser ? 'msg-user' : 'msg-bot'}`}>
+                        <div className={`msg-content ${isUser ? 'msg-user' : 'msg-bot'} ${msg.status === 'failed' ? 'msg-failed' : ''}`}>
                           {!isUser ? (
                             <ReactMarkdown className="md-content">{msg.content}</ReactMarkdown>
                           ) : msg.content}
                         </div>
+                        {isUser && msg.status === 'failed' && (
+                          <div className="msg-fail-row">
+                            <ExclamationCircleOutlined className="msg-fail-icon" />
+                            <span className="msg-fail-text">发送失败</span>
+                            <button
+                              className="msg-retry-btn"
+                              onClick={() => handleRetry(msg.id)}
+                              disabled={loading}
+                              aria-label="重新发送"
+                            >
+                              <ReloadOutlined /> 重发
+                            </button>
+                          </div>
+                        )}
                         {!isUser && msg.metadata && (
                           <div className="msg-meta">
                             {msg.metadata.sentiment && sentimentMap[msg.metadata.sentiment] && (
