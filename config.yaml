@@ -34,7 +34,9 @@ request_timeout: 120          # 单次请求超时（秒）
 max_queue_size: 50            # 等待队列最大长度
 
 # ── 数据库 ───────────────────────────────────────────
-# db_url: ""                  # PostgreSQL 连接串，或通过 DB_URL 环境变量设置
+# db_url: ""                  # 商品查询数据库连接串（远程），或通过 DB_URL 环境变量设置
+# session_db_url: ""          # 会话持久化数据库连接串（本地），或通过 SESSION_DB_URL 环境变量设置
+#                             # 未设置时回退到 db_url
 # db_allowed_tables: []       # 限定可查询的表，空则允许所有
 db_readonly: true
 sql_max_rows: 50              # 查询结果行数上限

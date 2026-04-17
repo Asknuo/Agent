@@ -60,7 +60,8 @@ async def lifespan(app: FastAPI):
     init_rag()
 
     # Initialize session store (Requirement 3.1)
-    session_store = SessionStore(db_url=config.db_url)
+    session_db = config.session_db_url or config.db_url
+    session_store = SessionStore(db_url=session_db)
     await session_store.init()
     set_session_store(session_store)
 

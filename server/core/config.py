@@ -46,7 +46,8 @@ class AppConfig(BaseModel):
     max_queue_size: int = Field(default=50, ge=0)
 
     # ── 数据库 ────────────────────────────────────────
-    db_url: str = ""
+    db_url: str = ""                # 商品查询数据库（远程）
+    session_db_url: str = ""        # 会话持久化数据库（本地）
     db_allowed_tables: list[str] = Field(default_factory=list)
     db_readonly: bool = True
     sql_max_rows: int = Field(default=50, ge=1)
@@ -106,6 +107,7 @@ _ENV_MAPPING: dict[str, str] = {
     "REQUEST_TIMEOUT": "request_timeout",
     "MAX_QUEUE_SIZE": "max_queue_size",
     "DB_URL": "db_url",
+    "SESSION_DB_URL": "session_db_url",
     "DB_ALLOWED_TABLES": "db_allowed_tables",
     "DB_READONLY": "db_readonly",
     "SQL_MAX_ROWS": "sql_max_rows",
