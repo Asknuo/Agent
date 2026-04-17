@@ -163,6 +163,10 @@ async def chat_stream(req: ChatRequest):
             process_message(session_id, req.user_id, req.message)
         )
 
+        # Push agent execution events via SSE (Requirement 15.1, 15.3)
+        for evt in metadata.agent_events:
+            yield f"data: {json.dumps(evt.model_dump())}\n\n"
+
         # 逐块推送文本（每次 ~4 个字符，模拟打字效果）
         chunk_size = 4
         for i in range(0, len(reply), chunk_size):

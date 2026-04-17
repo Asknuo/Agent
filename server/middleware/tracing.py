@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 import uuid
+from contextvars import ContextVar
 from functools import wraps
 from typing import Any, Callable
 
@@ -25,6 +26,31 @@ from starlette.responses import Response
 from server.core.logging_config import trace_id_var
 
 logger = logging.getLogger("tracing")
+
+# ── Agent event collector (Requirement 15.1, 15.3) ───
+# Stores AgentEvent dicts accumulated during a single request.
+_agent_events_var: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "agent_events", default=None
+)
+
+
+def start_event_collection() -> list[dict[str, Any]]:
+    """Begin collecting agent events for the current async context."""
+    events: list[dict[str, Any]] = []
+    _agent_events_var.set(events)
+    return events
+
+
+def collect_agent_event(event: dict[str, Any]) -> None:
+    """Append an agent event to the current request's collection (if active)."""
+    bucket = _agent_events_var.get(None)
+    if bucket is not None:
+        bucket.append(event)
+
+
+def get_collected_events() -> list[dict[str, Any]]:
+    """Return all agent events collected so far (empty list if none)."""
+    return _agent_events_var.get(None) or []
 
 # ── Prometheus 指标定义（需求 2.3）────────────────────
 
@@ -90,6 +116,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
 def timed_node(node_name: str) -> Callable:
     """
     包装 Agent 图节点函数，自动记录执行耗时到 Prometheus 指标。
+    Also emits node_start / node_end agent events (Requirement 15.1, 15.3).
 
     支持同步和异步节点函数。
     """
@@ -97,6 +124,12 @@ def timed_node(node_name: str) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            collect_agent_event({
+                "type": "agent_event",
+                "event": "node_start",
+                "node": node_name,
+                "timestamp": time.time(),
+            })
             start = time.time()
             try:
                 result = await func(*args, **kwargs)
@@ -104,9 +137,22 @@ def timed_node(node_name: str) -> Callable:
             finally:
                 duration_ms = (time.time() - start) * 1000
                 NODE_DURATION.labels(node=node_name).observe(duration_ms)
+                collect_agent_event({
+                    "type": "agent_event",
+                    "event": "node_end",
+                    "node": node_name,
+                    "duration_ms": int(duration_ms),
+                    "timestamp": time.time(),
+                })
 
         @wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            collect_agent_event({
+                "type": "agent_event",
+                "event": "node_start",
+                "node": node_name,
+                "timestamp": time.time(),
+            })
             start = time.time()
             try:
                 result = func(*args, **kwargs)
@@ -114,6 +160,13 @@ def timed_node(node_name: str) -> Callable:
             finally:
                 duration_ms = (time.time() - start) * 1000
                 NODE_DURATION.labels(node=node_name).observe(duration_ms)
+                collect_agent_event({
+                    "type": "agent_event",
+                    "event": "node_end",
+                    "node": node_name,
+                    "duration_ms": int(duration_ms),
+                    "timestamp": time.time(),
+                })
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper

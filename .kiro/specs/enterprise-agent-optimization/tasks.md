@@ -275,21 +275,21 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Fallback to existing keyword-based `_analyze_sentiment` and `_classify_intent` on LLM failure
     - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5_
 
-  - [ ]* 16.2 Write property test for LLM analysis result parsing (Property 21)
+  - [x] 16.2 Write property test for LLM analysis result parsing (Property 21)
     - **Property 21: Structured parsing** — valid JSON produces correct enum values, confidence clamped to [0,1]
     - **Validates: Requirements 14.1, 14.2, 14.5**
 
-- [ ] 17. Checkpoint — Ensure all tests pass
+- [x] 17. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 18. Implement Agent execution visualization (backend SSE events)
-  - [ ] 18.1 Add AgentEvent model to `server/models.py`
+- [x] 18. Implement Agent execution visualization (backend SSE events)
+  - [x] 18.1 Add AgentEvent model to `server/models.py`
     - Define event types: node_start, node_end, tool_call
     - Include node, tool, duration_ms, timestamp fields
     - Add agent_events list and trace_id to MessageMetadata
     - _Requirements: 15.1, 15.3_
 
-  - [ ] 18.2 Update `server/main.py` SSE stream to emit agent_event SSE messages
+  - [x] 18.2 Update `server/main.py` SSE stream to emit agent_event SSE messages
     - Collect agent events during graph execution
     - Push node_start, node_end, tool_call events via SSE before the text chunks
     - Include agent_events in metadata payload

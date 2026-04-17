@@ -51,6 +51,16 @@ class TicketStatus(str, Enum):
 
 # ── 数据模型 ──────────────────────────────────────────
 
+class AgentEvent(BaseModel):
+    """Agent execution event, pushed to frontend via SSE (Requirement 15.1, 15.3)"""
+    type: str = "agent_event"
+    event: str  # node_start | node_end | tool_call
+    node: Optional[str] = None
+    tool: Optional[str] = None
+    duration_ms: Optional[int] = None
+    timestamp: float = Field(default_factory=time.time)
+
+
 class MessageMetadata(BaseModel):
     sentiment: Optional[Sentiment] = None
     intent: Optional[IntentCategory] = None
@@ -59,6 +69,8 @@ class MessageMetadata(BaseModel):
     tools_used: list[str] = Field(default_factory=list)
     knowledge_refs: list[str] = Field(default_factory=list)
     response_time_ms: Optional[int] = None
+    trace_id: Optional[str] = None
+    agent_events: list[AgentEvent] = Field(default_factory=list)
 
 
 class Message(BaseModel):

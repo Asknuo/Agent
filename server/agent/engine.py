@@ -34,7 +34,7 @@ from langchain_core.messages import ToolMessage
 
 from server.resilience.circuit_breaker import CircuitBreaker, CircuitOpenError
 from server.core.config import get_config
-from server.core.logging_config import session_id_var, user_id_var
+from server.core.logging_config import session_id_var, user_id_var, trace_id_var
 from server.core.models import (
     Message, MessageMetadata, Session,
     Sentiment, IntentCategory, SessionStatus,
@@ -42,7 +42,7 @@ from server.core.models import (
 from server.resilience.retry import RetryEngine, RetryExhaustedError
 from server.data.session_store import SessionStore
 from server.agent.tools import ALL_TOOLS
-from server.middleware.tracing import TOOL_CALLS, timed_node
+from server.middleware.tracing import TOOL_CALLS, timed_node, collect_agent_event, start_event_collection, get_collected_events
 
 logger = logging.getLogger("agent")
 
@@ -478,6 +478,14 @@ def tool_node(state: AgentState) -> dict[str, Any]:
                 tool_name = tc["name"]
                 new_tools.append(tool_name)
                 TOOL_CALLS.labels(tool_name=tool_name, status="error").inc()
+                tool_duration_ms = int((time.time() - node_start) * 1000)
+                collect_agent_event({
+                    "type": "agent_event",
+                    "event": "tool_call",
+                    "tool": tool_name,
+                    "duration_ms": tool_duration_ms,
+                    "timestamp": time.time(),
+                })
 
         error_msg = ToolMessage(
             content=(
@@ -506,6 +514,14 @@ def tool_node(state: AgentState) -> dict[str, Any]:
             TOOL_CALLS.labels(tool_name=tool_name, status="ok").inc()
             if tool_name == "search_knowledge_tool":
                 new_refs.append(tc["args"].get("query", ""))
+            tool_duration_ms = int((time.time() - node_start) * 1000)
+            collect_agent_event({
+                "type": "agent_event",
+                "event": "tool_call",
+                "tool": tool_name,
+                "duration_ms": tool_duration_ms,
+                "timestamp": time.time(),
+            })
 
     duration_ms = int((time.time() - node_start) * 1000)
     logger.info("node_exit", extra={"extra_fields": {
@@ -671,6 +687,9 @@ async def process_message(
     session_id_var.set(session_id)
     user_id_var.set(user_id)
 
+    # Start collecting agent events for this request (Requirement 15.1)
+    agent_events_bucket = start_event_collection()
+
     logger.info("process_message_start", extra={"extra_fields": {
         "session_id": session_id, "user_id": user_id,
     }})
@@ -717,11 +736,20 @@ async def process_message(
         reply = _get_fallback_reply(intent, sentiment)
         tools_used, knowledge_refs, should_escalate = [], [], False
 
+    # Build AgentEvent model instances from collected raw dicts
+    from server.core.models import AgentEvent as AgentEventModel
+    collected = get_collected_events()
+    agent_event_models = [
+        AgentEventModel(**evt) for evt in collected
+    ]
+
     metadata = MessageMetadata(
         sentiment=sentiment, intent=intent, confidence=confidence,
         language=language, tools_used=tools_used,
         knowledge_refs=knowledge_refs,
         response_time_ms=int((time.time() - start) * 1000),
+        trace_id=trace_id_var.get(""),
+        agent_events=agent_event_models,
     )
     user_msg = Message(
         role="user", content=user_message,
