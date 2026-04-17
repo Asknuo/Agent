@@ -29,7 +29,11 @@ def search_knowledge_tool(query: str) -> str:
     results = search_knowledge(query)
     if not results:
         return "知识库中未找到相关信息。"
-    return "\n\n".join(f"【{r.title}】{r.content}" for r in results)
+    text = "\n\n".join(f"【{r.title}】{r.content}" for r in results)
+    # 如果结果包含价格信息，附加货币单位提醒
+    if "Rp" in text or "IDR" in text or "印尼盾" in text:
+        text += "\n\n⚠️ 注意：以上所有价格的货币单位为 IDR（印尼盾），回复时必须保留 Rp 前缀，不要转换为人民币。"
+    return text
 
 
 @tool
@@ -92,7 +96,13 @@ from server.data.database import is_db_available, get_table_schema, execute_quer
 def query_database(sql: str) -> str:
     """执行 SQL 查询 PostgreSQL 数据库。用于查询订单、用户、商品等业务数据。
     只允许 SELECT 查询。请根据用户问题生成合适的 SQL。"""
-    return execute_query(sql)
+    result = execute_query(sql)
+    # 如果结果包含价格相关列，附加货币单位提醒
+    price_keywords = ["price", "min_price", "max_price", "amount", "platform_price",
+                      "recycling_price", "selling_price", "brand_new_price"]
+    if any(kw in result.lower() for kw in price_keywords):
+        result += "\n\n⚠️ 注意：以上所有价格数据的货币单位均为 IDR（印尼盾），回复用户时必须使用 Rp 前缀显示，例如 Rp 3,836,000。绝对不要转换为人民币或其他货币。"
+    return result
 
 
 @tool

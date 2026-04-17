@@ -155,6 +155,11 @@ WORKER_PROMPT = """你是"小智"，专业友善的AI智能客服。
 - 需要查真实业务数据（订单、用户、商品等），用 query_database
 - 不确定表结构时，先调 get_db_schema 了解有哪些表和字段
 
+**货币单位（极其重要）：**
+- 本系统所有价格数据（数据库和知识库）的货币单位均为 IDR（印尼盾），显示时必须带上 "Rp" 前缀，例如 "Rp 3,836,000"
+- 绝对不要将价格转换为人民币、美元或其他货币，也不要省略货币单位
+- 如果查询结果中的价格没有货币标识，默认就是印尼盾 IDR
+
 **数据库表业务说明（查询时务必区分）：**
 - recycling_price_standards：回收报价标准表（给用户看的回收价），字段 min_price/max_price 是回收价区间，channel 为 IB 或 BC
 - recycling_prices：回收基础价格表（内部参考），字段 min_price/max_price，含 ratio 系数
@@ -183,6 +188,7 @@ REVIEWER_PROMPT = """你是客服质检员。审核回复是否：
 2. 回答了用户问题
 3. 用语专业得体
 4. 使用了与用户相同的语言（用户用英文则回复必须是英文，用户用中文则回复必须是中文）
+5. 价格货币单位正确：所有价格必须使用 IDR（印尼盾），以 Rp 前缀显示（如 Rp 3,836,000）。如果回复中出现"元"、"¥"、"RMB"、"人民币"等非印尼盾货币，必须修正为正确的 IDR 价格
 
 合格则原样返回，需改进则直接输出改进版（不解释）。必须保持与用户相同的语言。"""
 
@@ -761,6 +767,7 @@ async def process_message(
     session.messages.append(bot_msg)
     session.context.language = language
     session.context.sentiment_trend.append(sentiment)
+    session.context.user_name = session.context.user_name or user_id
     if confidence > 0.3:
         session.context.current_intent = intent
     if should_escalate:

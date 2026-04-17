@@ -30,15 +30,37 @@ EXCLUDED_PATHS: set[str] = {
     "/api/login", "/api/register",
 }
 
-# ── 用户存储（内存） ─────────────────────────────────
+# ── 用户存储（PostgreSQL + 内存回退） ────────────────
 
-_users: dict[str, dict[str, Any]] = {
-    # 预置 admin 用户
+_pool: Any = None  # asyncpg.Pool | None
+_fallback_users: dict[str, dict[str, Any]] = {
     "admin": {
         "password_hash": hashlib.sha256("admin".encode()).hexdigest(),
         "role": "admin",
     },
 }
+
+
+async def init_user_store(db_url: str) -> None:
+    """初始化用户存储的数据库连接池，启动时调用"""
+    global _pool
+    if not db_url:
+        logger.info("user_store_no_db — using in-memory fallback")
+        return
+    try:
+        import asyncpg
+        _pool = await asyncpg.create_pool(db_url, min_size=1, max_size=5)
+        logger.info("user_store_connected")
+    except Exception as exc:
+        logger.error("user_store_connect_failed", exc_info=exc)
+        _pool = None
+
+
+async def close_user_store() -> None:
+    global _pool
+    if _pool:
+        await _pool.close()
+        _pool = None
 
 
 def _hash_password(password: str) -> str:
@@ -49,20 +71,50 @@ def _verify_password(password: str, password_hash: str) -> bool:
     return _hash_password(password) == password_hash
 
 
-def create_user(username: str, password: str, role: str = "user") -> dict[str, Any] | None:
-    """注册新用户，用户名已存在返回 None"""
-    if username in _users:
+async def create_user(username: str, password: str, role: str = "user") -> dict[str, Any] | None:
+    """注册新用户，用户名已存在返回 None。优先写 PostgreSQL，失败回退内存。"""
+    pw_hash = _hash_password(password)
+    if _pool:
+        try:
+            async with _pool.acquire() as conn:
+                existing = await conn.fetchrow(
+                    "SELECT username FROM users WHERE username = $1", username,
+                )
+                if existing:
+                    return None
+                row = await conn.fetchrow(
+                    "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id",
+                    username, pw_hash, role,
+                )
+                return {"id": row["id"], "username": username, "role": role}
+        except Exception as exc:
+            logger.error("user_create_db_failed", exc_info=exc)
+            # fall through to in-memory
+    # 内存回退
+    if username in _fallback_users:
         return None
-    _users[username] = {
-        "password_hash": _hash_password(password),
-        "role": role,
-    }
+    _fallback_users[username] = {"password_hash": pw_hash, "role": role}
     return {"username": username, "role": role}
 
 
-def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
-    """验证用户名密码，成功返回用户信息，失败返回 None"""
-    user = _users.get(username)
+async def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
+    """验证用户名密码。优先查 PostgreSQL，失败回退内存。"""
+    pw_hash = _hash_password(password)
+    if _pool:
+        try:
+            async with _pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT username, password_hash, role FROM users WHERE username = $1",
+                    username,
+                )
+                if row and _verify_password(password, row["password_hash"]):
+                    return {"username": row["username"], "role": row["role"]}
+                return None
+        except Exception as exc:
+            logger.error("user_auth_db_failed", exc_info=exc)
+            # fall through to in-memory
+    # 内存回退
+    user = _fallback_users.get(username)
     if not user:
         return None
     if not _verify_password(password, user["password_hash"]):

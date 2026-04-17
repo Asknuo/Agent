@@ -21,6 +21,7 @@ from jose import JWTError
 from server.middleware.auth import (
     AuthMiddleware, verify_ws_token,
     authenticate_user, create_user, create_access_token,
+    init_user_store, close_user_store,
 )
 from server.resilience.concurrency import ConcurrencyController
 from server.core.config import get_config, init_config
@@ -65,10 +66,14 @@ async def lifespan(app: FastAPI):
     await session_store.init()
     set_session_store(session_store)
 
+    # Initialize user store (PostgreSQL persistence)
+    await init_user_store(session_db)
+
     yield
 
     # Cleanup
     await session_store.close()
+    await close_user_store()
 
 
 app = FastAPI(title="小智 AI 智能客服", version="1.0.0", lifespan=lifespan)
@@ -143,7 +148,7 @@ async def register(req: RegisterRequest):
         return JSONResponse(status_code=400, content={"detail": "用户名不能为空"})
     if len(req.password) < 3:
         return JSONResponse(status_code=400, content={"detail": "密码长度至少 3 位"})
-    user = create_user(req.username.strip(), req.password)
+    user = await create_user(req.username.strip(), req.password)
     if not user:
         return JSONResponse(status_code=409, content={"detail": "用户名已存在"})
     cfg = get_config()
@@ -153,7 +158,7 @@ async def register(req: RegisterRequest):
 
 @app.post("/api/login")
 async def login(req: LoginRequest):
-    user = authenticate_user(req.username.strip(), req.password)
+    user = await authenticate_user(req.username.strip(), req.password)
     if not user:
         return JSONResponse(status_code=401, content={"detail": "用户名或密码错误"})
     cfg = get_config()
@@ -162,18 +167,21 @@ async def login(req: LoginRequest):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     session_id = req.session_id or uuid.uuid4().hex
+    # Use authenticated username if available, otherwise fall back to request body
+    user_id = getattr(request.state, "user_id", None) or req.user_id
     reply, metadata = await _concurrency.execute(
-        process_message(session_id, req.user_id, req.message)
+        process_message(session_id, user_id, req.message)
     )
     return ChatResponse(session_id=session_id, reply=reply, metadata=metadata)
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(req: ChatRequest):
+async def chat_stream(req: ChatRequest, request: Request):
     """SSE 流式输出：先跑完 agent，再逐块推送回复"""
     session_id = req.session_id or uuid.uuid4().hex
+    user_id = getattr(request.state, "user_id", None) or req.user_id
 
     async def event_generator():
         # 发送 session_id
@@ -181,7 +189,7 @@ async def chat_stream(req: ChatRequest):
 
         # 运行 agent 获取完整回复（受并发控制保护）
         reply, metadata = await _concurrency.execute(
-            process_message(session_id, req.user_id, req.message)
+            process_message(session_id, user_id, req.message)
         )
 
         # Push agent execution events via SSE (Requirement 15.1, 15.3)

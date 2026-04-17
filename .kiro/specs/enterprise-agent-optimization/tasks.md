@@ -356,7 +356,7 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Extend Session with tenant_id, extend MessageMetadata with trace_id and agent_events
     - _Requirements: all_
 
-- [ ] 22. Final checkpoint — Ensure all tests pass
+- [x] 22. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
