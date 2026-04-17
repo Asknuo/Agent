@@ -118,7 +118,7 @@ export async function sendMessageStream(
       const res = await fetch(`${BASE}/chat/stream`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ message, session_id: sessionId, user_id: 'web-user' }),
+        body: JSON.stringify({ message, session_id: sessionId }),
       });
 
       if (res.status === 401) {

@@ -104,11 +104,11 @@ async def authenticate_user(username: str, password: str) -> dict[str, Any] | No
         try:
             async with _pool.acquire() as conn:
                 row = await conn.fetchrow(
-                    "SELECT username, password_hash, role FROM users WHERE username = $1",
+                    "SELECT id, username, password_hash, role FROM users WHERE username = $1",
                     username,
                 )
                 if row and _verify_password(password, row["password_hash"]):
-                    return {"username": row["username"], "role": row["role"]}
+                    return {"id": row["id"], "username": row["username"], "role": row["role"]}
                 return None
         except Exception as exc:
             logger.error("user_auth_db_failed", exc_info=exc)
@@ -124,7 +124,7 @@ async def authenticate_user(username: str, password: str) -> dict[str, Any] | No
 
 def create_access_token(
     username: str, role: str, secret_key: str, issuer: str = "xiaozhi",
-    expires_in: int = 86400,
+    expires_in: int = 86400, user_id: int | None = None,
 ) -> str:
     """签发 JWT token"""
     now = time.time()
@@ -135,6 +135,8 @@ def create_access_token(
         "iat": int(now),
         "exp": int(now + expires_in),
     }
+    if user_id is not None:
+        payload["user_id"] = user_id
     return jwt.encode(payload, secret_key, algorithm="HS256")
 
 
@@ -148,10 +150,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self.enabled = enabled
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        # When auth is disabled, pass through (dev mode)
+        # When auth is disabled, try to extract user from token but don't reject on failure
         if not self.enabled:
             request.state.user_id = "anonymous"
             request.state.tenant_id = "default"
+            # Best-effort: try to read JWT if present
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.removeprefix("Bearer ").strip()
+                if token:
+                    try:
+                        payload = jwt.decode(
+                            token, self.secret_key, algorithms=["HS256"],
+                            options={"verify_exp": True, "verify_iss": True},
+                            issuer=self.issuer,
+                        )
+                        request.state.user_id = str(payload.get("user_id", "")) or payload.get("sub", "anonymous")
+                        request.state.username = payload.get("sub", "anonymous")
+                        request.state.tenant_id = payload.get("tenant_id", "default")
+                    except JWTError:
+                        pass  # auth disabled, ignore errors
             return await call_next(request)
 
         # Skip excluded paths
@@ -177,7 +195,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 options={"verify_exp": True, "verify_iss": True},
                 issuer=self.issuer,
             )
-            request.state.user_id = payload.get("sub", "anonymous")
+            request.state.user_id = str(payload.get("user_id", "")) or payload.get("sub", "anonymous")
+            request.state.username = payload.get("sub", "anonymous")
             request.state.tenant_id = payload.get("tenant_id", "default")
         except JWTError as exc:
             # Requirement 4.5 — log WARNING on auth failures

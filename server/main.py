@@ -152,8 +152,11 @@ async def register(req: RegisterRequest):
     if not user:
         return JSONResponse(status_code=409, content={"detail": "用户名已存在"})
     cfg = get_config()
-    token = create_access_token(user["username"], user["role"], cfg.jwt_secret, cfg.jwt_issuer)
-    return {"token": token, "username": user["username"], "role": user["role"]}
+    token = create_access_token(
+        user["username"], user["role"], cfg.jwt_secret, cfg.jwt_issuer,
+        user_id=user.get("id"),
+    )
+    return {"token": token, "username": user["username"], "role": user["role"], "userId": user.get("id")}
 
 
 @app.post("/api/login")
@@ -162,8 +165,11 @@ async def login(req: LoginRequest):
     if not user:
         return JSONResponse(status_code=401, content={"detail": "用户名或密码错误"})
     cfg = get_config()
-    token = create_access_token(user["username"], user["role"], cfg.jwt_secret, cfg.jwt_issuer)
-    return {"token": token, "username": user["username"], "role": user["role"]}
+    token = create_access_token(
+        user["username"], user["role"], cfg.jwt_secret, cfg.jwt_issuer,
+        user_id=user.get("id"),
+    )
+    return {"token": token, "username": user["username"], "role": user["role"], "userId": user.get("id")}
 
 
 @app.post("/api/chat", response_model=ChatResponse)

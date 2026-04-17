@@ -550,7 +550,11 @@ def worker_done(state: AgentState) -> dict[str, Any]:
 
 # ── Node 3: Quality Reviewer ─────────────────────────
 
-_reviewer_llm = _make_llm(temperature=0.3, max_tokens=2048)
+_reviewer_llm = _make_llm(temperature=0.1, max_tokens=2048)
+
+# 需要严格审核的情绪/意图组合
+_REVIEW_SENTIMENTS = {Sentiment.NEGATIVE, Sentiment.FRUSTRATED}
+_REVIEW_INTENTS = {IntentCategory.COMPLAINT, IntentCategory.REFUND_REQUEST}
 
 
 @timed_node("reviewer")
@@ -565,6 +569,22 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
         }})
         return {"final_reply": "您好！我是小智，请问有什么可以帮您？"}
 
+    sentiment = state.get("sentiment", Sentiment.NEUTRAL)
+    intent = state.get("intent", IntentCategory.GENERAL_CHAT)
+
+    # 快速通道：正面/中性情绪 + 非敏感意图 → 跳过 LLM 审核
+    needs_review = sentiment in _REVIEW_SENTIMENTS or intent in _REVIEW_INTENTS
+    if not needs_review:
+        duration_ms = int((time.time() - node_start) * 1000)
+        logger.info("node_exit", extra={"extra_fields": {
+            "node": "reviewer", "event": "exit", "duration_ms": duration_ms,
+            "skipped": True, "reason": "fast_pass",
+        }})
+        return {
+            "final_reply": agent_reply,
+            "messages": [AIMessage(content=agent_reply)],
+        }
+
     try:
         resp = await _resilient_llm_invoke(
             _reviewer_llm,
@@ -572,7 +592,7 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
                 SystemMessage(content=REVIEWER_PROMPT),
                 HumanMessage(content=(
                     f"用户：{state.get('user_text', '')}\n"
-                    f"情绪：{state.get('sentiment', Sentiment.NEUTRAL).value}\n"
+                    f"情绪：{sentiment.value}\n"
                     f"客服回复：\n{agent_reply}"
                 )),
             ],
@@ -580,7 +600,6 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
         )
         reviewed = str(resp.content).strip()
     except (RetryExhaustedError, CircuitOpenError):
-        # 降级: 直接使用 worker 的原始回复
         reviewed = agent_reply
 
     duration_ms = int((time.time() - node_start) * 1000)

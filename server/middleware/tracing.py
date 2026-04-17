@@ -108,6 +108,11 @@ class TraceMiddleware(BaseHTTPMiddleware):
         REQUEST_COUNT.labels(endpoint=endpoint, method=method, status=status).inc()
         REQUEST_LATENCY.labels(endpoint=endpoint, method=method).observe(duration_ms)
 
+        logger.info("http_request", extra={"extra_fields": {
+            "endpoint": endpoint, "method": method, "status": status,
+            "duration_ms": round(duration_ms, 2), "trace_id": trace_id,
+        }})
+
         return response
 
 
@@ -130,6 +135,7 @@ def timed_node(node_name: str) -> Callable:
                 "node": node_name,
                 "timestamp": time.time(),
             })
+            logger.info("node_start", extra={"extra_fields": {"node": node_name}})
             start = time.time()
             try:
                 result = await func(*args, **kwargs)
@@ -137,6 +143,9 @@ def timed_node(node_name: str) -> Callable:
             finally:
                 duration_ms = (time.time() - start) * 1000
                 NODE_DURATION.labels(node=node_name).observe(duration_ms)
+                logger.info("node_end", extra={"extra_fields": {
+                    "node": node_name, "duration_ms": round(duration_ms, 2),
+                }})
                 collect_agent_event({
                     "type": "agent_event",
                     "event": "node_end",
@@ -153,6 +162,7 @@ def timed_node(node_name: str) -> Callable:
                 "node": node_name,
                 "timestamp": time.time(),
             })
+            logger.info("node_start", extra={"extra_fields": {"node": node_name}})
             start = time.time()
             try:
                 result = func(*args, **kwargs)
@@ -160,6 +170,9 @@ def timed_node(node_name: str) -> Callable:
             finally:
                 duration_ms = (time.time() - start) * 1000
                 NODE_DURATION.labels(node=node_name).observe(duration_ms)
+                logger.info("node_end", extra={"extra_fields": {
+                    "node": node_name, "duration_ms": round(duration_ms, 2),
+                }})
                 collect_agent_event({
                     "type": "agent_event",
                     "event": "node_end",
