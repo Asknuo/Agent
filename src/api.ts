@@ -71,6 +71,14 @@ export async function registerApi(username: string, password: string): Promise<A
 
 // ── 聊天相关 ─────────────────────────────────────────
 
+export interface AgentEvent {
+  event: 'node_start' | 'node_end' | 'tool_call';
+  node?: string;
+  tool?: string;
+  duration_ms?: number;
+  timestamp: number;
+}
+
 export interface ChatMetadata {
   sentiment?: string;
   intent?: string;
@@ -79,6 +87,8 @@ export interface ChatMetadata {
   toolsUsed?: string[];
   knowledgeRefs?: string[];
   responseTimeMs?: number;
+  traceId?: string;
+  agentEvents?: AgentEvent[];
 }
 
 export interface ChatResponse {
@@ -99,6 +109,7 @@ export async function sendMessageStream(
   onChunk: (text: string) => void,
   onMetadata: (meta: ChatMetadata) => void,
   onDone: () => void,
+  onAgentEvent?: (event: AgentEvent) => void,
 ): Promise<void> {
   let attempt = 0;
 
@@ -140,6 +151,9 @@ export async function sendMessageStream(
             switch (evt.type) {
               case 'session':
                 onSessionId(evt.sessionId);
+                break;
+              case 'agent_event':
+                if (onAgentEvent) onAgentEvent(evt as AgentEvent);
                 break;
               case 'chunk':
                 onChunk(evt.content);

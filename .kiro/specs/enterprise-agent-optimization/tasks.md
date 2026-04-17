@@ -315,18 +315,18 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Retry SSE connection on failure: 3 second delay, max 3 retries
     - _Requirements: 12.5_
 
-  - [ ]* 19.4 Write property test for localStorage round trip (Property 18)
+  - [x] 19.4 Write property test for localStorage round trip (Property 18)
     - **Property 18: localStorage round trip** — save then load preserves all message fields
     - **Validates: Requirements 12.3**
 
-- [ ] 20. Implement Agent execution visualization (frontend)
-  - [ ] 20.1 Add AgentEvent TypeScript interface and update ChatMetadata in `src/api.ts`
+- [x] 20. Implement Agent execution visualization (frontend)
+  - [x] 20.1 Add AgentEvent TypeScript interface and update ChatMetadata in `src/api.ts`
     - Define AgentEvent interface with event, node, tool, duration_ms, timestamp
     - Add traceId and agentEvents to ChatMetadata
     - Parse agent_event SSE messages in sendMessageStream
     - _Requirements: 15.1, 15.2_
 
-  - [ ] 20.2 Create collapsible execution detail panel in `src/App.tsx`
+  - [x] 20.2 Create collapsible execution detail panel in `src/App.tsx`
     - Display agent execution steps (nodes, tools, durations) below assistant message bubbles
     - Default to collapsed state, toggle on click
     - _Requirements: 15.2, 15.4_

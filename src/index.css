@@ -498,3 +498,67 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Agent 执行可视化面板 ─────────────────── */
+.agent-exec-panel {
+  margin-top: 6px;
+}
+.agent-exec-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #9ca3af;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.agent-exec-toggle:hover {
+  background: #f0f0f0;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+.agent-exec-toggle-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+.agent-exec-toggle-text {
+  line-height: 1;
+}
+.agent-exec-steps {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-exec-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4b5563;
+}
+.agent-exec-step-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a78bfa;
+  flex-shrink: 0;
+}
+.agent-exec-step-label {
+  flex: 1;
+}
+.agent-exec-step-duration {
+  color: #f59e0b;
+  font-weight: 500;
+  font-size: 11px;
+  font-family: monospace;
+}

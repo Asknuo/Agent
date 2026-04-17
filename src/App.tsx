@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { sendMessageStream, rateSession, fetchMetrics, loginApi, registerApi, setToken, clearAuth, getToken, ChatMetadata, MetricEntry } from './api';
+import { sendMessageStream, rateSession, fetchMetrics, loginApi, registerApi, setToken, clearAuth, getToken, ChatMetadata, MetricEntry, AgentEvent } from './api';
 import ReactMarkdown from 'react-markdown';
 import { Tag, Rate, Tooltip, ConfigProvider } from 'antd';
 import {
@@ -15,6 +15,7 @@ interface ChatMessage {
   timestamp: number;
   metadata?: ChatMetadata;
   status?: 'sending' | 'sent' | 'failed';
+  agentEvents?: AgentEvent[];
 }
 
 // ── localStorage 持久化 ──────────────────────────────
@@ -347,6 +348,66 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Agent 执行可视化面板 ─────────────────────────────
+
+const nodeLabels: Record<string, string> = {
+  supervisor: '🧭 路由决策',
+  worker: '⚙️ 任务执行',
+  reviewer: '✅ 质量审核',
+  tool: '🔧 工具调用',
+};
+
+function AgentExecutionPanel({ events }: { events: AgentEvent[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!events || events.length === 0) return null;
+
+  // Build a timeline of completed steps from node_end and tool_call events
+  const steps: { label: string; detail?: string; durationMs?: number }[] = [];
+  for (const evt of events) {
+    if (evt.event === 'node_end' && evt.node) {
+      steps.push({
+        label: nodeLabels[evt.node] || evt.node,
+        durationMs: evt.duration_ms,
+      });
+    } else if (evt.event === 'tool_call' && evt.tool) {
+      steps.push({
+        label: '🔧 ' + evt.tool,
+        durationMs: evt.duration_ms,
+      });
+    }
+  }
+
+  if (steps.length === 0) return null;
+
+  return (
+    <div className="agent-exec-panel">
+      <button
+        className="agent-exec-toggle"
+        onClick={() => setExpanded(prev => !prev)}
+        aria-expanded={expanded}
+        aria-label="展开/折叠执行详情"
+      >
+        <span className="agent-exec-toggle-icon">{expanded ? '▾' : '▸'}</span>
+        <span className="agent-exec-toggle-text">执行过程 · {steps.length} 步</span>
+      </button>
+      {expanded && (
+        <div className="agent-exec-steps">
+          {steps.map((step, i) => (
+            <div key={i} className="agent-exec-step">
+              <span className="agent-exec-step-dot" />
+              <span className="agent-exec-step-label">{step.label}</span>
+              {step.durationMs != null && (
+                <span className="agent-exec-step-duration">{step.durationMs}ms</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 聊天主界面 ───────────────────────────────────────
 
 function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
@@ -422,6 +483,7 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
           }));
           setLoading(false);
         },
+        evt => setMessages(prev => prev.map(m => m.id === botId ? { ...m, agentEvents: [...(m.agentEvents || []), evt] } : m)),
       );
     } catch {
       setMessages(prev => prev.map(m => {
@@ -600,6 +662,9 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
                               </Tag>
                             )}
                           </div>
+                        )}
+                        {!isUser && msg.agentEvents && msg.agentEvents.length > 0 && (
+                          <AgentExecutionPanel events={msg.agentEvents} />
                         )}
                       </div>
                       {isUser && userIcon}
