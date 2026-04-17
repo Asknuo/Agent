@@ -2,6 +2,7 @@
 node_modules/
 **/tests/
 **/migrations/
+**/_tests_/
 # Python
 __pycache__/
 *.pyc

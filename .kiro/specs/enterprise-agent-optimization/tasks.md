@@ -331,27 +331,27 @@ Incrementally upgrade the "小智 AI 智能客服" system from prototype to ente
     - Default to collapsed state, toggle on click
     - _Requirements: 15.2, 15.4_
 
-  - [ ]* 20.3 Write unit tests for agent event rendering
+  - [x] 20.3 Write unit tests for agent event rendering
     - Test collapsed/expanded states
     - Test event display content
     - _Requirements: 15.2, 15.4_
 
-- [ ] 21. Update dependencies and wire everything together
-  - [ ] 21.1 Update `server/requirements.txt` with new dependencies
+- [x] 21. Update dependencies and wire everything together
+  - [x] 21.1 Update `server/requirements.txt` with new dependencies
     - Add: prometheus_client, python-jose[cryptography], sqlparse, pyyaml, hypothesis
     - _Requirements: all_
 
-  - [ ] 21.2 Update `package.json` with frontend test dependency
+  - [x] 21.2 Update `package.json` with frontend test dependency
     - Add: fast-check
     - _Requirements: all_
 
-  - [ ] 21.3 Register all middleware in correct order in `server/main.py`
+  - [x] 21.3 Register all middleware in correct order in `server/main.py`
     - Order: AuthMiddleware → RateLimitMiddleware → TraceMiddleware → TenantMiddleware
     - Add global exception handler
     - Wire ConcurrencyController into chat endpoints
     - _Requirements: all_
 
-  - [ ] 21.4 Extend `server/models.py` with all new data models
+  - [x] 21.4 Extend `server/models.py` with all new data models
     - Add TenantConfig, TraceContext, NodeSpan, RequestTrace, AgentEvent, CircuitState, CacheEntry
     - Extend Session with tenant_id, extend MessageMetadata with trace_id and agent_events
     - _Requirements: all_

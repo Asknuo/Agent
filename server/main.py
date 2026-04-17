@@ -15,7 +15,7 @@ import logging
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from jose import JWTError
 
 from server.middleware.auth import (
@@ -112,6 +112,26 @@ _concurrency = ConcurrencyController(
     max_queue=_cfg.max_queue_size,
     timeout=_cfg.request_timeout,
 )
+
+
+# ── Global exception handler ─────────────────────────
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler: log the error and return a generic 500 response."""
+    logger.error(
+        "unhandled_exception",
+        exc_info=exc,
+        extra={"extra_fields": {
+            "path": str(request.url.path),
+            "method": request.method,
+            "error_type": type(exc).__name__,
+        }},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again later."},
+    )
 
 
 # ── REST API ──────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 import time
 import uuid
@@ -120,6 +120,62 @@ class KnowledgeEntry(BaseModel):
     content: str
     category: str
     tags: list[str]
+
+
+# ── 配置相关 ──────────────────────────────────────────
+
+class TenantConfig(BaseModel):
+    """租户级配置"""
+    tenant_id: str
+    rate_limit_rpm: int = 30
+    knowledge_dir: str = ""  # 空则使用默认知识库
+    custom_prompts: dict[str, str] = Field(default_factory=dict)
+
+
+# ── 可观测性 ──────────────────────────────────────────
+
+class TraceContext(BaseModel):
+    """链路追踪上下文"""
+    trace_id: str
+    session_id: str = ""
+    user_id: str = ""
+    tenant_id: str = "default"
+    start_time: float = Field(default_factory=time.time)
+
+
+class NodeSpan(BaseModel):
+    """节点执行跨度"""
+    node_name: str
+    start_time: float
+    end_time: float = 0.0
+    duration_ms: int = 0
+    status: str = "ok"  # ok | error
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RequestTrace(BaseModel):
+    """完整请求追踪"""
+    trace_id: str
+    spans: list[NodeSpan] = Field(default_factory=list)
+    total_duration_ms: int = 0
+    tools_called: list[str] = Field(default_factory=list)
+
+
+# ── 熔断器状态 ────────────────────────────────────────
+
+class CircuitState(str, Enum):
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+# ── 缓存条目 ──────────────────────────────────────────
+
+class CacheEntry(BaseModel):
+    key: str
+    value: Any
+    created_at: float = Field(default_factory=time.time)
+    ttl: int = 300
 
 
 # ── API 请求/响应 ─────────────────────────────────────
