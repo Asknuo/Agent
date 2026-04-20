@@ -96,26 +96,26 @@
     - 测试文件: `server/tests/test_profile_properties.py`
     - **验证: 需求 2.4**
 
-- [ ] 6. 实现主动知识推荐引擎
-  - [ ] 6.1 创建 `server/agent/recommendation.py`
+- [x] 6. 实现主动知识推荐引擎
+  - [x] 6.1 创建 `server/agent/recommendation.py`
     - 实现 `RecommendationEngine` 类，包含 `get_recommendations(intent, main_results, session_context)` 和 `_deduplicate(candidates, main_results)` 方法
     - 定义 `INTENT_TOPIC_MAP` 意图到推荐查询词映射
     - 推荐最多 2 条，基于 ID 去重，超时 2 秒自动放弃返回空列表
     - 支持通过 `recommendation_enabled` 配置关闭
     - _需求: 3.1, 3.2, 3.3, 3.5, 3.7_
 
-  - [ ] 6.2 实现推荐内容格式化函数
+  - [x] 6.2 实现推荐内容格式化函数
     - 实现 `format_recommendations(main_reply, recommendations)` 函数
     - 非空推荐时附加"您可能还想了解"分隔标记；空推荐时返回原始回复
     - _需求: 3.4_
 
-  - [ ]* 6.3 编写属性测试：推荐知识不变量
+  - [x] 6.3 编写属性测试：推荐知识不变量
     - **Property 5: 推荐知识不变量**
     - 验证输出条目数 ≤ 2、无 ID 与主查询重复、每个 ID 都记录在 metadata 中
     - 测试文件: `server/tests/test_recommendation_properties.py`
     - **验证: 需求 3.1, 3.3, 3.6**
 
-  - [ ]* 6.4 编写属性测试：推荐内容格式化正确性
+  - [x] 6.4 编写属性测试：推荐内容格式化正确性
     - **Property 6: 推荐内容格式化正确性**
     - 验证非空推荐时输出包含"您可能还想了解"和每条标题；空推荐时输出与原始回复相同
     - 测试文件: `server/tests/test_recommendation_properties.py`
