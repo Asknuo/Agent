@@ -1,12 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { sendMessageStream, rateSession, fetchMetrics, loginApi, registerApi, setToken, clearAuth, getToken, ChatMetadata, MetricEntry, AgentEvent } from './api';
 import ReactMarkdown from 'react-markdown';
-import { Tag, Rate, Tooltip, ConfigProvider } from 'antd';
+import { Tag, Rate, Tooltip, Dropdown, ConfigProvider, theme as antdTheme } from 'antd';
 import {
   SendOutlined, ReloadOutlined, ClockCircleOutlined, ToolOutlined,
   DashboardOutlined, LogoutOutlined, UserOutlined, LockOutlined,
-  ExclamationCircleOutlined,
+  ExclamationCircleOutlined, DownloadOutlined, FilePdfOutlined, FileTextOutlined,
+  SearchOutlined, CloseOutlined,
 } from '@ant-design/icons';
+import { ThemeProvider, useTheme } from './ThemeProvider';
+import { I18nProvider, useI18n } from './I18nProvider';
+import { exportToJSON, exportToPDF, downloadBlob } from './export';
+import type { ExportOptions } from './export';
+import { useMessageSearch } from './search';
+import type { SearchableMessage } from './search';
 
 interface ChatMessage {
   id: string;
@@ -51,32 +58,49 @@ interface UserInfo {
   role: 'user' | 'admin';
 }
 
-const quickReplies = [
-  { icon: '📦', text: '查询订单 ORD-20240101' },
-  { icon: '💰', text: '退款政策是什么？' },
-  { icon: '👑', text: '会员有什么权益？' },
-  { icon: '👤', text: '帮我转人工客服' },
-  { icon: '🌐', text: 'What payment methods?' },
+const quickReplyKeys = [
+  { icon: '📦', key: 'chat.quick.orderQuery' },
+  { icon: '💰', key: 'chat.quick.refundPolicy' },
+  { icon: '👑', key: 'chat.quick.memberBenefits' },
+  { icon: '👤', key: 'chat.quick.humanAgent' },
+  { icon: '🌐', key: 'chat.quick.paymentMethods' },
 ];
 
-const sentimentMap: Record<string, { color: string; label: string }> = {
-  positive: { color: 'green', label: '😊 积极' },
-  neutral: { color: 'default', label: '😐 中性' },
-  negative: { color: 'red', label: '😠 消极' },
-  frustrated: { color: 'orange', label: '😤 焦躁' },
-  confused: { color: 'gold', label: '😕 困惑' },
+const sentimentKeys: Record<string, { color: string; key: string }> = {
+  positive: { color: 'green', key: 'sentiment.positive' },
+  neutral: { color: 'default', key: 'sentiment.neutral' },
+  negative: { color: 'red', key: 'sentiment.negative' },
+  frustrated: { color: 'orange', key: 'sentiment.frustrated' },
+  confused: { color: 'gold', key: 'sentiment.confused' },
 };
 
-const intentMap: Record<string, string> = {
-  product_inquiry: '📦 产品咨询', order_status: '🚚 订单查询',
-  refund_request: '💰 退款申请', technical_support: '🔧 技术支持',
-  complaint: '📢 投诉', general_chat: '💬 闲聊',
-  human_handoff: '👤 转人工', feedback: '📝 反馈',
+const intentKeys: Record<string, string> = {
+  product_inquiry: 'intent.product_inquiry', order_status: 'intent.order_status',
+  refund_request: 'intent.refund_request', technical_support: 'intent.technical_support',
+  complaint: 'intent.complaint', general_chat: 'intent.general_chat',
+  human_handoff: 'intent.human_handoff', feedback: 'intent.feedback',
 };
+
+// ── 主题切换按钮 ─────────────────────────────────────
+
+function ThemeToggleButton() {
+  const { theme, toggleTheme } = useTheme();
+  const { t } = useI18n();
+  const icon = theme === 'dark' ? '🌙' : theme === 'system' ? '💻' : '☀️';
+  const label = theme === 'dark' ? t('theme.dark') : theme === 'system' ? t('theme.system') : t('theme.light');
+  return (
+    <Tooltip title={label} placement="bottom">
+      <button className="header-btn" onClick={toggleTheme} aria-label={t('theme.toggle.ariaLabel')}>
+        <span style={{ fontSize: 16 }}>{icon}</span>
+      </button>
+    </Tooltip>
+  );
+}
 
 // ── 登录页面 ─────────────────────────────────────────
 
 function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
+  const { t } = useI18n();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -86,11 +110,11 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
-      setError('请输入用户名和密码');
+      setError(t('login.error.empty'));
       return;
     }
     if (password.length < 3) {
-      setError('密码长度至少 3 位');
+      setError(t('login.error.passwordShort'));
       return;
     }
     setLoading(true);
@@ -106,7 +130,7 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
       localStorage.setItem('xiaozhi_user', JSON.stringify(user));
       onLogin(user);
     } catch (err: any) {
-      setError(err.message || (isRegister ? '注册失败' : '登录失败'));
+      setError(err.message || (isRegister ? t('login.error.registerFailed') : t('login.error.loginFailed')));
     } finally {
       setLoading(false);
     }
@@ -117,6 +141,9 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
       <div className="bg-orb bg-orb-1" />
       <div className="bg-orb bg-orb-2" />
       <div className="bg-orb bg-orb-3" />
+      <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
+        <ThemeToggleButton />
+      </div>
       <div className="login-card">
         <div className="login-header">
           <div className="avatar-bot-lg">
@@ -126,44 +153,44 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
               <path d="M12 7v4" />
             </svg>
           </div>
-          <h2 className="login-title">小智 AI 客服</h2>
-          <p className="login-desc">{isRegister ? '创建新账号' : '登录后开始对话'}</p>
+          <h2 className="login-title">{t('login.title')}</h2>
+          <p className="login-desc">{isRegister ? t('login.desc.register') : t('login.desc.login')}</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
           <div className="login-field">
             <UserOutlined className="login-icon" />
             <input
               type="text"
-              placeholder="用户名"
+              placeholder={t('login.placeholder.username')}
               value={username}
               onChange={e => setUsername(e.target.value)}
               className="login-input"
               autoFocus
-              aria-label="用户名"
+              aria-label={t('login.placeholder.username')}
             />
           </div>
           <div className="login-field">
             <LockOutlined className="login-icon" />
             <input
               type="password"
-              placeholder="密码"
+              placeholder={t('login.placeholder.password')}
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="login-input"
-              aria-label="密码"
+              aria-label={t('login.placeholder.password')}
             />
           </div>
           {error && <div className="login-error">{error}</div>}
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? (isRegister ? '注册中...' : '登录中...') : (isRegister ? '注 册' : '登 录')}
+            {loading ? (isRegister ? t('login.btn.registerLoading') : t('login.btn.loginLoading')) : (isRegister ? t('login.btn.register') : t('login.btn.login'))}
           </button>
           <div className="login-switch">
-            {isRegister ? '已有账号？' : '没有账号？'}
+            {isRegister ? t('login.switch.hasAccount') : t('login.switch.noAccount')}
             <button type="button" className="login-switch-btn" onClick={() => { setIsRegister(!isRegister); setError(''); }}>
-              {isRegister ? '去登录' : '注册新账号'}
+              {isRegister ? t('login.switch.goLogin') : t('login.switch.goRegister')}
             </button>
           </div>
-          <div className="login-hint">管理员: admin / admin</div>
+          <div className="login-hint">{t('login.hint')}</div>
         </form>
       </div>
     </div>
@@ -173,6 +200,7 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
 // ── Metrics 面板 ─────────────────────────────────────
 
 function MetricsPanel({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [metrics, setMetrics] = useState<MetricEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -184,11 +212,11 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
       setMetrics(data);
       setError('');
     } catch (e: any) {
-      setError(e.message || '加载失败');
+      setError(e.message || t('metrics.error'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadMetrics();
@@ -242,7 +270,7 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
         <div className="metrics-header">
           <div className="metrics-header-left">
             <DashboardOutlined style={{ fontSize: 18 }} />
-            <span className="metrics-title">系统监控</span>
+            <span className="metrics-title">{t('metrics.title')}</span>
           </div>
           <div className="metrics-header-right">
             <label className="metrics-toggle">
@@ -251,14 +279,14 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
                 checked={autoRefresh}
                 onChange={e => setAutoRefresh(e.target.checked)}
               />
-              <span>自动刷新</span>
+              <span>{t('metrics.autoRefresh')}</span>
             </label>
-            <button className="metrics-refresh-btn" onClick={loadMetrics} title="手动刷新">↻</button>
+            <button className="metrics-refresh-btn" onClick={loadMetrics} title={t('metrics.manualRefresh')}>↻</button>
             <button className="metrics-close-btn" onClick={onClose}>✕</button>
           </div>
         </div>
 
-        {loading && <div className="metrics-loading">加载中...</div>}
+        {loading && <div className="metrics-loading">{t('metrics.loading')}</div>}
         {error && <div className="metrics-error">⚠ {error}</div>}
 
         {!loading && !error && (
@@ -267,25 +295,25 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
             <div className="metrics-cards">
               <div className="metric-card">
                 <div className="metric-card-value">{totalRequests}</div>
-                <div className="metric-card-label">总请求数</div>
+                <div className="metric-card-label">{t('metrics.totalRequests')}</div>
               </div>
               <div className="metric-card">
                 <div className="metric-card-value">{toolCalls.reduce((s, [, v]) => s + v, 0)}</div>
-                <div className="metric-card-label">工具调用</div>
+                <div className="metric-card-label">{t('metrics.toolCalls')}</div>
               </div>
               <div className="metric-card">
                 <div className="metric-card-value">{nodeDurations.reduce((s, d) => s + d.count, 0)}</div>
-                <div className="metric-card-label">节点执行</div>
+                <div className="metric-card-label">{t('metrics.nodeExecutions')}</div>
               </div>
             </div>
 
             {/* 工具调用统计 */}
             {toolCalls.length > 0 && (
               <div className="metrics-section">
-                <h3 className="metrics-section-title">🔧 工具调用统计</h3>
+                <h3 className="metrics-section-title">{t('metrics.section.toolCalls')}</h3>
                 <div className="metrics-table">
                   <div className="metrics-table-header">
-                    <span>工具名称</span><span>调用次数</span>
+                    <span>{t('metrics.table.toolName')}</span><span>{t('metrics.table.callCount')}</span>
                   </div>
                   {toolCalls.map(([name, count]) => (
                     <div key={name} className="metrics-table-row">
@@ -300,10 +328,10 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
             {/* 节点耗时 */}
             {nodeDurations.length > 0 && (
               <div className="metrics-section">
-                <h3 className="metrics-section-title">⏱ 节点耗时</h3>
+                <h3 className="metrics-section-title">{t('metrics.section.nodeDuration')}</h3>
                 <div className="metrics-table">
                   <div className="metrics-table-header">
-                    <span>节点</span><span>执行次数</span><span>平均耗时</span>
+                    <span>{t('metrics.table.node')}</span><span>{t('metrics.table.execCount')}</span><span>{t('metrics.table.avgDuration')}</span>
                   </div>
                   {nodeDurations.map(d => (
                     <div key={d.node} className="metrics-table-row metrics-table-row-3">
@@ -318,7 +346,7 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
 
             {/* 原始指标 */}
             <div className="metrics-section">
-              <h3 className="metrics-section-title">📊 全部指标</h3>
+              <h3 className="metrics-section-title">{t('metrics.section.allMetrics')}</h3>
               <div className="metrics-raw">
                 {metrics.map(m => (
                   <div key={m.name} className="metrics-raw-item">
@@ -335,7 +363,7 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
                       </div>
                     ))}
                     {m.samples.length > 10 && (
-                      <div className="metrics-raw-more">... 还有 {m.samples.length - 10} 条</div>
+                      <div className="metrics-raw-more">{t('metrics.raw.more', { count: String(m.samples.length - 10) })}</div>
                     )}
                   </div>
                 ))}
@@ -350,29 +378,31 @@ function MetricsPanel({ onClose }: { onClose: () => void }) {
 
 // ── Agent 执行可视化面板 ─────────────────────────────
 
-const nodeLabels: Record<string, string> = {
-  supervisor: '🧭 路由决策',
-  worker: '⚙️ 任务执行',
-  reviewer: '✅ 质量审核',
-  tool: '🔧 工具调用',
+const nodeKeys: Record<string, string> = {
+  supervisor: 'agent.node.supervisor',
+  worker: 'agent.node.worker',
+  reviewer: 'agent.node.reviewer',
+  tool: 'agent.node.tool',
 };
 
 function AgentExecutionPanel({ events }: { events: AgentEvent[] }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useI18n();
 
   if (!events || events.length === 0) return null;
 
   // Build a timeline of completed steps from node_end and tool_call events
-  const steps: { label: string; detail?: string; durationMs?: number }[] = [];
+  const steps: { labelKey?: string; rawLabel?: string; detail?: string; durationMs?: number }[] = [];
   for (const evt of events) {
     if (evt.event === 'node_end' && evt.node) {
       steps.push({
-        label: nodeLabels[evt.node] || evt.node,
+        labelKey: nodeKeys[evt.node],
+        rawLabel: evt.node,
         durationMs: evt.duration_ms,
       });
     } else if (evt.event === 'tool_call' && evt.tool) {
       steps.push({
-        label: '🔧 ' + evt.tool,
+        rawLabel: '🔧 ' + evt.tool,
         durationMs: evt.duration_ms,
       });
     }
@@ -386,17 +416,17 @@ function AgentExecutionPanel({ events }: { events: AgentEvent[] }) {
         className="agent-exec-toggle"
         onClick={() => setExpanded(prev => !prev)}
         aria-expanded={expanded}
-        aria-label="展开/折叠执行详情"
+        aria-label={t('agent.toggle.ariaLabel')}
       >
         <span className="agent-exec-toggle-icon">{expanded ? '▾' : '▸'}</span>
-        <span className="agent-exec-toggle-text">执行过程 · {steps.length} 步</span>
+        <span className="agent-exec-toggle-text">{t('agent.steps', { count: String(steps.length) })}</span>
       </button>
       {expanded && (
         <div className="agent-exec-steps">
           {steps.map((step, i) => (
             <div key={i} className="agent-exec-step">
               <span className="agent-exec-step-dot" />
-              <span className="agent-exec-step-label">{step.label}</span>
+              <span className="agent-exec-step-label">{step.labelKey ? t(step.labelKey) : step.rawLabel}</span>
               {step.durationMs != null && (
                 <span className="agent-exec-step-duration">{step.durationMs}ms</span>
               )}
@@ -411,6 +441,7 @@ function AgentExecutionPanel({ events }: { events: AgentEvent[] }) {
 // ── 聊天主界面 ───────────────────────────────────────
 
 function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
+  const { t, locale, setLocale } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = loadSessionFromStorage();
     return saved ? saved.messages : [];
@@ -423,8 +454,27 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
   });
   const [rated, setRated] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Search hook
+  const searchableMessages: SearchableMessage[] = messages.map(m => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    timestamp: m.timestamp,
+    metadata: m.metadata as Record<string, unknown> | undefined,
+  }));
+  const { filters, setFilters, results, filteredMessages, isSearching } = useMessageSearch(searchableMessages);
+
+  // Build highlight map: messageId -> matchPositions
+  const highlightMap = new Map<string, [number, number][]>();
+  for (const r of results) {
+    if (r.matchPositions.length > 0) {
+      highlightMap.set(r.messageId, r.matchPositions);
+    }
+  }
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
@@ -488,7 +538,7 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
     } catch {
       setMessages(prev => prev.map(m => {
         if (m.id === (retryMsgId || userMsg.id)) return { ...m, status: 'failed' as const };
-        if (m.id === botId) return { ...m, content: '抱歉，服务暂时不可用，请稍后再试。', status: 'failed' as const };
+        if (m.id === botId) return { ...m, content: t('chat.msg.serviceUnavailable'), status: 'failed' as const };
         return m;
       }));
       setLoading(false);
@@ -526,6 +576,24 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
 
   const showRating = !loading && !rated && sessionId && messages.filter(m => m.role === 'user').length >= 2;
 
+  // Highlight helper: wraps matched text segments with <mark> tags
+  const renderHighlightedText = (text: string, positions: [number, number][]) => {
+    if (!positions || positions.length === 0) return text;
+    const parts: React.ReactNode[] = [];
+    let lastIdx = 0;
+    for (const [start, end] of positions) {
+      if (start > lastIdx) {
+        parts.push(text.slice(lastIdx, start));
+      }
+      parts.push(<mark key={`${start}-${end}`} className="search-highlight">{text.slice(start, end)}</mark>);
+      lastIdx = end;
+    }
+    if (lastIdx < text.length) {
+      parts.push(text.slice(lastIdx));
+    }
+    return <>{parts}</>;
+  };
+
   return (
     <>
       <div className="app-bg">
@@ -547,33 +615,134 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
                 </svg>
               </div>
               <div>
-                <div className="header-title">小智 AI 客服</div>
+                <div className="header-title">{t('chat.header.title')}</div>
                 <div className="header-status">
                   <span className="status-dot" />
-                  <span>在线 · {user.username}</span>
+                  <span>{t('chat.header.online', { username: user.username })}</span>
                 </div>
               </div>
             </div>
             <div className="header-actions">
+              <ThemeToggleButton />
+              <button
+                className="header-btn"
+                onClick={() => setLocale(locale === 'zh-CN' ? 'en-US' : 'zh-CN')}
+                aria-label="Switch language"
+                style={{ fontSize: 13, fontWeight: 600 }}
+              >
+                {locale === 'zh-CN' ? 'EN' : '中'}
+              </button>
+              <Tooltip title={t('search.tooltip')} placement="bottom">
+                <button
+                  className={`header-btn ${showSearch ? 'header-btn-active' : ''}`}
+                  onClick={() => {
+                    setShowSearch(v => !v);
+                    if (showSearch) {
+                      setFilters({ keyword: '', role: 'all' });
+                    }
+                  }}
+                  aria-label={t('search.tooltip')}
+                >
+                  <SearchOutlined />
+                </button>
+              </Tooltip>
+              <Dropdown
+                menu={{
+                  items: [
+                    { key: 'pdf', icon: <FilePdfOutlined />, label: t('export.pdf') },
+                    { key: 'json', icon: <FileTextOutlined />, label: t('export.json') },
+                  ],
+                  onClick: ({ key }) => {
+                    const format = key as 'pdf' | 'json';
+                    const options: ExportOptions = {
+                      format,
+                      includeMetadata: true,
+                      includeAgentEvents: true,
+                    };
+                    if (format === 'json') {
+                      const json = exportToJSON(messages, sessionId, options, locale);
+                      downloadBlob(
+                        new Blob([json], { type: 'application/json' }),
+                        `chat-${sessionId?.slice(0, 8) ?? 'export'}.json`,
+                      );
+                    } else {
+                      exportToPDF(messages, sessionId, options);
+                    }
+                  },
+                }}
+                disabled={messages.length === 0}
+                trigger={['click']}
+              >
+                <Tooltip title={t('export.button')} placement="bottom">
+                  <button className="header-btn" disabled={messages.length === 0} aria-label={t('export.button')}>
+                    <DownloadOutlined />
+                  </button>
+                </Tooltip>
+              </Dropdown>
               {user.role === 'admin' && (
-                <Tooltip title="系统监控" placement="bottom">
-                  <button className="header-btn" onClick={() => setShowMetrics(true)} aria-label="监控面板">
+                <Tooltip title={t('chat.header.tooltip.metrics')} placement="bottom">
+                  <button className="header-btn" onClick={() => setShowMetrics(true)} aria-label={t('chat.header.tooltip.metrics')}>
                     <DashboardOutlined />
                   </button>
                 </Tooltip>
               )}
-              <Tooltip title="开始新对话" placement="bottom">
-                <button className="header-btn" onClick={handleReset} aria-label="新对话">
+              <Tooltip title={t('chat.header.tooltip.reset')} placement="bottom">
+                <button className="header-btn" onClick={handleReset} aria-label={t('chat.header.tooltip.reset')}>
                   <ReloadOutlined />
                 </button>
               </Tooltip>
-              <Tooltip title="退出登录" placement="bottomRight">
-                <button className="header-btn" onClick={onLogout} aria-label="退出">
+              <Tooltip title={t('chat.header.tooltip.logout')} placement="bottomRight">
+                <button className="header-btn" onClick={onLogout} aria-label={t('chat.header.tooltip.logout')}>
                   <LogoutOutlined />
                 </button>
               </Tooltip>
             </div>
           </div>
+
+          {/* Search Bar */}
+          {showSearch && (
+            <div className="search-bar">
+              <div className="search-bar-inner">
+                <SearchOutlined className="search-bar-icon" />
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder={t('search.placeholder')}
+                  value={filters.keyword}
+                  onChange={e => setFilters({ keyword: e.target.value })}
+                  autoFocus
+                  aria-label={t('search.placeholder')}
+                />
+                <select
+                  className="search-role-select"
+                  value={filters.role || 'all'}
+                  onChange={e => setFilters({ role: e.target.value as 'user' | 'assistant' | 'all' })}
+                  aria-label="Role filter"
+                >
+                  <option value="all">{t('search.roleFilter.all')}</option>
+                  <option value="user">{t('search.roleFilter.user')}</option>
+                  <option value="assistant">{t('search.roleFilter.assistant')}</option>
+                </select>
+                <span className="search-count">
+                  {isSearching
+                    ? (filteredMessages.length > 0
+                        ? t('search.resultCount', { count: String(filteredMessages.length) })
+                        : t('search.noResults'))
+                    : ''}
+                </span>
+                <button
+                  className="search-close-btn"
+                  onClick={() => {
+                    setShowSearch(false);
+                    setFilters({ keyword: '', role: 'all' });
+                  }}
+                  aria-label={t('search.close')}
+                >
+                  <CloseOutlined />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Messages */}
           <div ref={scrollRef} className="chat-messages chat-scroll">
@@ -582,20 +751,23 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
                 <div className="welcome-avatar">
                   <span className="welcome-emoji">🤖</span>
                 </div>
-                <h2 className="welcome-title">你好，{user.username}</h2>
-                <p className="welcome-desc">我是小智，你的 AI 智能客服助手，有什么可以帮你的？</p>
+                <h2 className="welcome-title">{t('chat.welcome.title', { username: user.username })}</h2>
+                <p className="welcome-desc">{t('chat.welcome.desc')}</p>
                 <div className="quick-grid">
-                  {quickReplies.map(q => (
-                    <button key={q.text} className="quick-btn" onClick={() => handleSend(q.text)}>
-                      <span className="quick-icon">{q.icon}</span>
-                      <span className="quick-text">{q.text}</span>
-                    </button>
-                  ))}
+                  {quickReplyKeys.map(q => {
+                    const text = t(q.key);
+                    return (
+                      <button key={q.key} className="quick-btn" onClick={() => handleSend(text)}>
+                        <span className="quick-icon">{q.icon}</span>
+                        <span className="quick-text">{text}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
               <div className="msg-list">
-                {messages.map(msg => {
+                {(isSearching ? messages.filter(m => filteredMessages.some(fm => fm.id === m.id)) : messages).map(msg => {
                   if (msg.role === 'assistant' && !msg.content) return null;
                   const isUser = msg.role === 'user';
 
@@ -624,32 +796,38 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
                       <div className={`msg-col ${isUser ? 'msg-col-user' : ''}`}>
                         <div className={`msg-content ${isUser ? 'msg-user' : 'msg-bot'} ${msg.status === 'failed' ? 'msg-failed' : ''}`}>
                           {!isUser ? (
-                            <ReactMarkdown className="md-content">{msg.content}</ReactMarkdown>
-                          ) : msg.content}
+                            highlightMap.has(msg.id)
+                              ? <div className="md-content">{renderHighlightedText(msg.content, highlightMap.get(msg.id)!)}</div>
+                              : <ReactMarkdown className="md-content">{msg.content}</ReactMarkdown>
+                          ) : (
+                            highlightMap.has(msg.id)
+                              ? renderHighlightedText(msg.content, highlightMap.get(msg.id)!)
+                              : msg.content
+                          )}
                         </div>
                         {isUser && msg.status === 'failed' && (
                           <div className="msg-fail-row">
                             <ExclamationCircleOutlined className="msg-fail-icon" />
-                            <span className="msg-fail-text">发送失败</span>
+                            <span className="msg-fail-text">{t('chat.msg.sendFailed')}</span>
                             <button
                               className="msg-retry-btn"
                               onClick={() => handleRetry(msg.id)}
                               disabled={loading}
-                              aria-label="重新发送"
+                              aria-label={t('chat.msg.retry')}
                             >
-                              <ReloadOutlined /> 重发
+                              <ReloadOutlined /> {t('chat.msg.retry')}
                             </button>
                           </div>
                         )}
                         {!isUser && msg.metadata && (
                           <div className="msg-meta">
-                            {msg.metadata.sentiment && sentimentMap[msg.metadata.sentiment] && (
-                              <Tag color={sentimentMap[msg.metadata.sentiment].color}>
-                                {sentimentMap[msg.metadata.sentiment].label}
+                            {msg.metadata.sentiment && sentimentKeys[msg.metadata.sentiment] && (
+                              <Tag color={sentimentKeys[msg.metadata.sentiment].color}>
+                                {t(sentimentKeys[msg.metadata.sentiment].key)}
                               </Tag>
                             )}
-                            {msg.metadata.intent && intentMap[msg.metadata.intent] && (
-                              <Tag>{intentMap[msg.metadata.intent]}</Tag>
+                            {msg.metadata.intent && intentKeys[msg.metadata.intent] && (
+                              <Tag>{t(intentKeys[msg.metadata.intent])}</Tag>
                             )}
                             {msg.metadata.toolsUsed && msg.metadata.toolsUsed.length > 0 && (
                               <Tag icon={<ToolOutlined />} color="purple">
@@ -693,12 +871,12 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
           {/* Rating */}
           {showRating && (
             <div className="rating-bar">
-              <span>对本次服务满意吗？</span>
+              <span>{t('chat.rating.ask')}</span>
               <Rate allowHalf={false} onChange={handleRate} style={{ fontSize: 15 }} />
             </div>
           )}
           {rated && (
-            <div className="rating-bar rated">感谢您的评价 ✨</div>
+            <div className="rating-bar rated">{t('chat.rating.thanks')}</div>
           )}
 
           {/* Input */}
@@ -709,7 +887,7 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="输入您的问题..."
+                placeholder={t('chat.input.placeholder')}
                 rows={1}
                 className="chat-textarea"
                 aria-label="消息输入框"
@@ -724,7 +902,7 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
               </button>
             </div>
             <div className="input-footer">
-              <span>Enter 发送 · Shift+Enter 换行</span>
+              <span>{t('chat.input.hint')}</span>
               {sessionId && <span>ID: {sessionId.slice(0, 8)}</span>}
             </div>
           </div>
@@ -736,15 +914,17 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
   );
 }
 
-// ── 根组件 ───────────────────────────────────────────
+// ── 根组件（内层，消费 ThemeContext）────────────────────
 
-export default function App() {
+function AppInner() {
+  const { resolvedTheme } = useTheme();
+  const { antdLocale } = useI18n();
+
   const [user, setUser] = useState<UserInfo | null>(() => {
     try {
       const saved = localStorage.getItem('xiaozhi_user');
       const token = getToken();
       if (saved && token) return JSON.parse(saved);
-      // 有用户信息但没 token，清除无效状态
       if (saved && !token) localStorage.removeItem('xiaozhi_user');
       return null;
     } catch {
@@ -758,12 +938,30 @@ export default function App() {
   };
 
   return (
-    <ConfigProvider theme={{ token: { colorPrimary: '#6366f1', borderRadius: 10 } }}>
+    <ConfigProvider
+      locale={antdLocale}
+      theme={{
+        algorithm: resolvedTheme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        token: { colorPrimary: '#6366f1', borderRadius: 10 },
+      }}
+    >
       {user ? (
         <ChatPage user={user} onLogout={handleLogout} />
       ) : (
         <LoginPage onLogin={setUser} />
       )}
     </ConfigProvider>
+  );
+}
+
+// ── 根组件 ───────────────────────────────────────────
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <I18nProvider>
+        <AppInner />
+      </I18nProvider>
+    </ThemeProvider>
   );
 }

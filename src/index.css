@@ -295,6 +295,85 @@ body {
 
 /* ── Header actions ───────────────────────── */
 .header-actions { display: flex; gap: 6px; }
+.header-btn-active { background: var(--accent-color, #6366f1) !important; color: #fff !important; }
+
+/* ── Search Bar ───────────────────────────── */
+.search-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color, #f0f0f0);
+  background: var(--bg-secondary, #fafafa);
+}
+.search-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input-bg, #fff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+.search-bar-icon {
+  color: var(--text-secondary, #9ca3af);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-primary, #1f2937);
+  min-width: 0;
+}
+.search-input::placeholder {
+  color: var(--text-secondary, #9ca3af);
+}
+.search-role-select {
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  background: var(--bg-secondary, #fafafa);
+  color: var(--text-primary, #1f2937);
+  cursor: pointer;
+  outline: none;
+}
+.search-count {
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.search-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #9ca3af);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.search-close-btn:hover {
+  background: var(--border-color, #e5e7eb);
+  color: var(--text-primary, #1f2937);
+}
+
+/* ── Search Highlight ─────────────────────── */
+.search-highlight {
+  background: #fef08a;
+  color: #1f2937;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+[data-theme="dark"] .search-highlight {
+  background: #854d0e;
+  color: #fef9c3;
+}
 
 /* ── 登录页 ───────────────────────────────── */
 .login-card {
@@ -561,4 +640,443 @@ body {
   font-weight: 500;
   font-size: 11px;
   font-family: monospace;
+}
+
+/* ══════════════════════════════════════════════
+   Dark Mode Overrides
+   ══════════════════════════════════════════════ */
+
+[data-theme="dark"] body {
+  background: #111214;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .app-bg {
+  background: #111214;
+}
+
+[data-theme="dark"] .bg-orb-1 { background: #312e81; opacity: 0.2; }
+[data-theme="dark"] .bg-orb-2 { background: #4c1d95; opacity: 0.2; }
+[data-theme="dark"] .bg-orb-3 { background: #1e3a5f; opacity: 0.2; }
+
+[data-theme="dark"] .chat-container {
+  background: #1a1b1e;
+  box-shadow: 0 4px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .chat-header {
+  background: #1a1b1e;
+  border-bottom-color: #2d2f34;
+}
+
+[data-theme="dark"] .header-title { color: #e5e7eb; }
+[data-theme="dark"] .header-status { color: #9ca3af; }
+
+[data-theme="dark"] .header-btn {
+  background: #2d2f34;
+  color: #9ca3af;
+}
+[data-theme="dark"] .header-btn:hover {
+  background: #3a3d44;
+  color: #e5e7eb;
+}
+
+/* ── Messages ─────────────────────────────── */
+[data-theme="dark"] .chat-messages { background: #1a1b1e; }
+
+[data-theme="dark"] .msg-bot {
+  background: #2d2f34;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .avatar-user-sm {
+  background: #2d2f34;
+  color: #9ca3af;
+}
+
+/* ── Welcome ──────────────────────────────── */
+[data-theme="dark"] .welcome-avatar {
+  background: linear-gradient(135deg, #1e1b4b, #2e1065);
+  border-color: #312e81;
+}
+[data-theme="dark"] .welcome-title { color: #e5e7eb; }
+[data-theme="dark"] .welcome-desc { color: #9ca3af; }
+
+[data-theme="dark"] .quick-btn {
+  background: #23252a;
+  border-color: #2d2f34;
+  color: #d1d5db;
+}
+[data-theme="dark"] .quick-btn:hover {
+  background: #1e1b4b;
+  border-color: #4338ca;
+  color: #a5b4fc;
+}
+
+/* ── Input area ───────────────────────────── */
+[data-theme="dark"] .chat-input-area {
+  background: #1a1b1e;
+  border-top-color: #2d2f34;
+}
+[data-theme="dark"] .input-wrapper {
+  background: #23252a;
+  border-color: #3a3d44;
+}
+[data-theme="dark"] .input-wrapper:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  background: #2d2f34;
+}
+[data-theme="dark"] .chat-textarea {
+  color: #e5e7eb;
+}
+[data-theme="dark"] .chat-textarea::placeholder { color: #6b7280; }
+[data-theme="dark"] .input-footer { color: #4b5563; }
+
+/* ── Rating ───────────────────────────────── */
+[data-theme="dark"] .rating-bar {
+  background: #2d2a1a;
+  border-top-color: #2d2f34;
+  color: #fbbf24;
+}
+[data-theme="dark"] .rating-bar.rated {
+  background: #1a2e1a;
+  color: #4ade80;
+}
+
+/* ── Login page ───────────────────────────── */
+[data-theme="dark"] .login-card {
+  background: #1a1b1e;
+  box-shadow: 0 4px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .login-title { color: #e5e7eb; }
+[data-theme="dark"] .login-desc { color: #9ca3af; }
+[data-theme="dark"] .login-field {
+  background: #23252a;
+  border-color: #3a3d44;
+}
+[data-theme="dark"] .login-field:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  background: #2d2f34;
+}
+[data-theme="dark"] .login-icon { color: #6b7280; }
+[data-theme="dark"] .login-input {
+  color: #e5e7eb;
+}
+[data-theme="dark"] .login-input::placeholder { color: #6b7280; }
+[data-theme="dark"] .login-hint { color: #4b5563; }
+[data-theme="dark"] .login-switch { color: #9ca3af; }
+
+/* ── Metrics panel ────────────────────────── */
+[data-theme="dark"] .metrics-overlay {
+  background: rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .metrics-panel {
+  background: #1a1b1e;
+  box-shadow: 0 8px 60px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .metrics-header {
+  border-bottom-color: #2d2f34;
+}
+[data-theme="dark"] .metrics-header-left { color: #e5e7eb; }
+[data-theme="dark"] .metrics-toggle { color: #9ca3af; }
+[data-theme="dark"] .metrics-refresh-btn,
+[data-theme="dark"] .metrics-close-btn {
+  background: #2d2f34;
+  color: #9ca3af;
+}
+[data-theme="dark"] .metrics-refresh-btn:hover,
+[data-theme="dark"] .metrics-close-btn:hover {
+  background: #3a3d44;
+  color: #e5e7eb;
+}
+[data-theme="dark"] .metrics-loading,
+[data-theme="dark"] .metrics-error { color: #9ca3af; }
+[data-theme="dark"] .metric-card {
+  background: linear-gradient(135deg, #1e1b4b, #2e1065);
+  border-color: #312e81;
+}
+[data-theme="dark"] .metric-card-value { color: #a5b4fc; }
+[data-theme="dark"] .metric-card-label { color: #9ca3af; }
+[data-theme="dark"] .metrics-section-title { color: #e5e7eb; }
+[data-theme="dark"] .metrics-table {
+  border-color: #2d2f34;
+}
+[data-theme="dark"] .metrics-table-header {
+  background: #23252a;
+  color: #9ca3af;
+}
+[data-theme="dark"] .metrics-table-row {
+  border-top-color: #2d2f34;
+  color: #d1d5db;
+}
+[data-theme="dark"] .metrics-raw-item {
+  background: #23252a;
+  border-color: #2d2f34;
+}
+[data-theme="dark"] .metrics-raw-name { color: #e5e7eb; }
+[data-theme="dark"] .metrics-raw-help { color: #9ca3af; }
+[data-theme="dark"] .metrics-raw-labels { color: #9ca3af; }
+[data-theme="dark"] .metrics-raw-value { color: #a5b4fc; }
+
+/* ── Markdown in dark mode ────────────────── */
+[data-theme="dark"] .md-content code {
+  background: #1e1b4b;
+  color: #a5b4fc;
+}
+[data-theme="dark"] .md-content pre {
+  background: #111214;
+  border: 1px solid #2d2f34;
+}
+[data-theme="dark"] .md-content a { color: #818cf8; }
+[data-theme="dark"] .md-content th {
+  background: #23252a;
+  border-color: #2d2f34;
+}
+[data-theme="dark"] .md-content td {
+  border-color: #2d2f34;
+}
+[data-theme="dark"] .md-content tr:nth-child(even) { background: #23252a; }
+
+/* ── Agent execution panel ────────────────── */
+[data-theme="dark"] .agent-exec-toggle {
+  background: #23252a;
+  border-color: #3a3d44;
+  color: #9ca3af;
+}
+[data-theme="dark"] .agent-exec-toggle:hover {
+  background: #2d2f34;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+[data-theme="dark"] .agent-exec-steps {
+  background: #23252a;
+  border-color: #2d2f34;
+}
+[data-theme="dark"] .agent-exec-step { color: #d1d5db; }
+
+/* ── Message retry/failed ─────────────────── */
+[data-theme="dark"] .msg-retry-btn {
+  background: #2d1a1a;
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+[data-theme="dark"] .msg-retry-btn:hover {
+  background: #3d1a1a;
+  border-color: #991b1b;
+}
+
+/* ── Scrollbar ────────────────────────────── */
+[data-theme="dark"] .chat-scroll::-webkit-scrollbar-thumb { background: #3a3d44; }
+[data-theme="dark"] .chat-scroll::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* ══════════════════════════════════════════════
+   Mobile Responsive (max-width: 768px)
+   ══════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* ── 禁止双击缩放 ──────────────────────────── */
+  html {
+    touch-action: manipulation;
+  }
+
+  /* ── 软键盘弹出时布局调整 ───────────────────── */
+  .app-bg {
+    height: var(--viewport-height, 100vh);
+    height: 100dvh;
+    min-height: 0;
+  }
+  .chat-container {
+    height: var(--viewport-height, 100vh);
+    height: 100dvh;
+  }
+
+  /* ── 背景 ─────────────────────────────────── */
+  .app-bg {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  /* ── 主容器：全宽无圆角 ─────────────────── */
+  .chat-container {
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* ── Header：紧凑排列 ──────────────────── */
+  .chat-header {
+    padding: 12px 12px;
+  }
+  .header-left {
+    gap: 8px;
+  }
+  .avatar-bot-lg {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+  .header-title {
+    font-size: 14px;
+  }
+  .header-actions {
+    gap: 4px;
+  }
+  .header-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  /* ── 消息区域 ───────────────────────────── */
+  .chat-messages {
+    padding: 12px 10px;
+  }
+
+  /* ── 消息气泡：最大宽度调整 ─────────────── */
+  .msg-col {
+    max-width: 88%;
+  }
+  .msg-content {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  /* ── 欢迎页 ─────────────────────────────── */
+  .welcome {
+    padding: 0 16px;
+  }
+  .welcome-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+  }
+  .welcome-emoji {
+    font-size: 28px;
+  }
+  .welcome-title {
+    font-size: 18px;
+  }
+  .welcome-desc {
+    font-size: 13px;
+    max-width: 260px;
+  }
+
+  /* ── 快捷回复按钮适配小屏 ───────────────── */
+  .quick-grid {
+    max-width: 100%;
+    gap: 6px;
+  }
+  .quick-btn {
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  /* ── 输入区域贴底 ───────────────────────── */
+  .chat-input-area {
+    padding: 8px 10px 12px;
+    position: sticky;
+    bottom: 0;
+  }
+  .input-wrapper {
+    border-radius: 14px;
+    padding: 4px 4px 4px 12px;
+  }
+
+  /* ── 搜索栏 ─────────────────────────────── */
+  .search-bar {
+    padding: 6px 10px;
+  }
+  .search-bar-inner {
+    padding: 4px 10px;
+  }
+  .search-role-select {
+    padding: 2px 6px;
+    font-size: 11px;
+  }
+
+  /* ── 登录页 ─────────────────────────────── */
+  .login-card {
+    max-width: 100%;
+    border-radius: 0;
+    padding: 32px 20px 24px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* ── Metrics 面板 ───────────────────────── */
+  .metrics-overlay {
+    padding: 0;
+  }
+  .metrics-panel {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .metrics-cards {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .metric-card {
+    padding: 12px;
+  }
+  .metric-card-value {
+    font-size: 22px;
+  }
+
+  /* ── Agent 执行面板 ─────────────────────── */
+  .agent-exec-steps {
+    padding: 6px 10px;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   Mobile Touch Targets (min 44×44px)
+   ══════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* 所有按钮最小触控区域 */
+  .header-btn,
+  .send-btn,
+  .quick-btn,
+  .login-btn,
+  .msg-retry-btn,
+  .agent-exec-toggle,
+  .metrics-refresh-btn,
+  .metrics-close-btn,
+  .search-close-btn,
+  .login-switch-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 输入框最小高度 */
+  .chat-textarea,
+  .login-input,
+  .search-input {
+    min-height: 44px;
+  }
+
+  /* 搜索角色选择器 */
+  .search-role-select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 登录字段容器 */
+  .login-field {
+    min-height: 44px;
+  }
+
+  /* 快捷回复按钮 */
+  .quick-btn {
+    min-height: 44px;
+  }
 }
