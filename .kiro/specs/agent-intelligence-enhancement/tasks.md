@@ -72,25 +72,25 @@
     - 测试文件: `server/tests/test_summarizer_properties.py`
     - **验证: 需求 1.3**
 
-- [ ] 5. 实现用户画像学习模块
-  - [ ] 5.1 在 `server/agent/summarizer.py` 或新建 `server/agent/profile_analyzer.py` 中实现画像分析逻辑
+- [x] 5. 实现用户画像学习模块
+  - [x] 5.1 在 `server/agent/summarizer.py` 或新建 `server/agent/profile_analyzer.py` 中实现画像分析逻辑
     - 实现 `analyze_communication_style(messages)` 函数：基于平均消息长度、表情符号、正式用语推断风格
     - 实现 `extract_frequent_topics(messages, current_intent)` 函数：从历史意图提取高频主题
     - 实现 `update_satisfaction(profile, sentiment)` 函数：根据情绪更新满意度趋势
     - _需求: 2.1, 2.2, 2.7_
 
-  - [ ] 5.2 实现画像 Prompt 注入函数 `_build_profile_prompt_segment(profile)`
+  - [x] 5.2 实现画像 Prompt 注入函数 `_build_profile_prompt_segment(profile)`
     - 根据 `communication_style` 生成风格提示文本
     - 包含 `frequent_topics` 前 3 个主题和 `interaction_count`
     - _需求: 2.4_
 
-  - [ ]* 5.3 编写属性测试：沟通风格推断规则一致性
+  - [x] 5.3 编写属性测试：沟通风格推断规则一致性
     - **Property 3: 沟通风格推断规则一致性**
     - 使用 Hypothesis 生成随机消息集合（变长、含/不含表情），验证推断结果符合设计文档中的规则
     - 测试文件: `server/tests/test_profile_properties.py`
     - **验证: 需求 2.7**
 
-  - [ ]* 5.4 编写属性测试：画像 Prompt 注入完整性
+  - [x] 5.4 编写属性测试：画像 Prompt 注入完整性
     - **Property 4: 画像 Prompt 注入完整性**
     - 使用 Hypothesis 生成随机 `UserProfile`，验证 Prompt 片段包含风格提示、前 3 主题、交互次数
     - 测试文件: `server/tests/test_profile_properties.py`
