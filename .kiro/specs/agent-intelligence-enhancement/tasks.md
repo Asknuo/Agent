@@ -52,21 +52,21 @@
 - [x] 3. 检查点 — 确保数据模型和存储层测试通过
   - 确保所有测试通过，如有问题请询问用户。
 
-- [ ] 4. 实现长会话摘要压缩模块
-  - [ ] 4.1 创建 `server/agent/summarizer.py`
+- [x] 4. 实现长会话摘要压缩模块
+  - [x] 4.1 创建 `server/agent/summarizer.py`
     - 实现 `Summarizer` 类，包含 `check_and_summarize(session)`、`_generate_summary(messages)`、`_build_summary_prompt(messages)` 方法
     - 摘要触发条件：消息数 > `summary_threshold` 且无可复用摘要
     - 返回格式：`[SystemMessage(摘要)]` + 最近 N 条原始消息；失败时回退到最近 18 条
     - 实现 `safe_deserialize_summary(json_str)` 函数，非法 JSON 返回 `ConversationSummary.empty()` 而不抛异常
     - _需求: 1.1, 1.2, 1.3, 1.4, 1.5, 1.7, 5.1, 5.3_
 
-  - [ ]* 4.2 编写属性测试：摘要触发逻辑正确性
+  - [x] 4.2 编写属性测试：摘要触发逻辑正确性
     - **Property 1: 摘要触发逻辑正确性**
     - 使用 Hypothesis 生成随机消息列表和随机阈值，验证摘要仅在消息数 > 阈值且无已有摘要时触发
     - 测试文件: `server/tests/test_summarizer_properties.py`
     - **验证: 需求 1.1, 1.7**
 
-  - [ ]* 4.3 编写属性测试：摘要后消息列表结构正确性
+  - [x] 4.3 编写属性测试：摘要后消息列表结构正确性
     - **Property 2: 摘要后消息列表结构正确性**
     - 验证构建的 LLM 输入恰好包含 1 条摘要系统消息 + min(N, 实际消息数) 条最近原始消息，且顺序一致
     - 测试文件: `server/tests/test_summarizer_properties.py`
