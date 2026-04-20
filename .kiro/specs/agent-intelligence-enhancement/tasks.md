@@ -36,20 +36,20 @@
     - 测试文件: `server/tests/test_summary_serialization_properties.py`
     - **验证: 需求 5.3**
 
-- [ ] 2. 数据库迁移：用户画像表
-  - [ ] 2.1 创建 `server/migrations/005_create_user_profiles.sql` 迁移文件
+- [x] 2. 数据库迁移：用户画像表
+  - [x] 2.1 创建 `server/migrations/005_create_user_profiles.sql` 迁移文件
     - 创建 `user_profiles` 表，包含 `user_id`（主键）、`preferred_language`、`communication_style`、`frequent_topics`（JSONB）、`satisfaction_history`（JSONB）、`interaction_count`、`created_at`、`updated_at` 字段
     - 创建 `idx_profiles_updated` 索引
     - _需求: 2.3_
 
-  - [ ] 2.2 实现 `server/data/profile_store.py` 用户画像持久化模块
+  - [x] 2.2 实现 `server/data/profile_store.py` 用户画像持久化模块
     - 实现 `ProfileStore` 类，包含 `init()`、`close()`、`load(user_id)`、`save(profile)` 方法
     - `load` 方法从 PostgreSQL 加载画像，支持超时降级返回 `None`
     - `save` 方法使用 UPSERT 语义，失败时记录日志但不阻塞
     - 参考 `server/data/session_store.py` 的 asyncpg 连接池模式
     - _需求: 2.3, 2.5, 2.6_
 
-- [ ] 3. 检查点 — 确保数据模型和存储层测试通过
+- [x] 3. 检查点 — 确保数据模型和存储层测试通过
   - 确保所有测试通过，如有问题请询问用户。
 
 - [ ] 4. 实现长会话摘要压缩模块
