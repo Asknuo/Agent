@@ -118,6 +118,16 @@ const zhCN: Record<string, string> = {
   'export.button': '导出对话',
   'export.pdf': '导出为 PDF',
   'export.json': '导出为 JSON',
+
+  // ── Sidebar ──
+  'sidebar.title': '对话记录',
+  'sidebar.empty': '暂无对话记录',
+  'sidebar.newChat': '新对话',
+  'sidebar.loading': '加载中...',
+  'sidebar.msgCount': '{count} 条消息',
+  'sidebar.today': '今天',
+  'sidebar.yesterday': '昨天',
+  'sidebar.earlier': '更早',
 };
 
 export default zhCN;

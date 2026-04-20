@@ -192,6 +192,31 @@ export async function rateSession(sessionId: string, rating: number): Promise<vo
   });
 }
 
+// ── 会话列表 ─────────────────────────────────────────
+
+export interface SessionSummary {
+  id: string;
+  user_id: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+  satisfaction: number | null;
+  messages: { role: string; content: string }[];
+}
+
+export async function fetchSessions(): Promise<SessionSummary[]> {
+  const res = await fetch(`${BASE}/sessions`, { headers: authHeaders() });
+  if (res.status === 401) { clearAuth(); window.location.reload(); return []; }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSessionDetail(sessionId: string): Promise<SessionSummary | null> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}`, { headers: authHeaders() });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 // ── 指标 ─────────────────────────────────────────────
 
 export interface MetricEntry {

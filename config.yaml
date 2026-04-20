@@ -64,3 +64,17 @@ default_tenant_id: "default"
 # rag_response_path: "data"
 # rag_content_field: "content"
 # rag_title_field: "title"
+
+# ── 长会话摘要 ───────────────────────────────────────
+summary_threshold: 20          # 触发摘要的消息数阈值
+summary_recent_count: 8        # 摘要后保留的最近消息数
+
+# ── 用户画像 ─────────────────────────────────────────
+profile_load_timeout: 3        # 画像加载超时（秒）
+
+# ── 主动推荐 ─────────────────────────────────────────
+recommendation_enabled: true   # 是否启用主动推荐
+recommendation_timeout: 2      # 推荐检索超时（秒）
+
+# ── 多轮澄清 ─────────────────────────────────────────
+clarification_confidence_threshold: 0.4  # 澄清触发的置信度阈值

@@ -29,6 +29,12 @@ class IntentCategory(str, Enum):
     FEEDBACK = "feedback"
 
 
+class CommunicationStyle(str, Enum):
+    FORMAL = "formal"
+    CASUAL = "casual"
+    CONCISE = "concise"
+
+
 class SessionStatus(str, Enum):
     ACTIVE = "active"
     RESOLVED = "resolved"
@@ -51,6 +57,36 @@ class TicketStatus(str, Enum):
 
 # ── 数据模型 ──────────────────────────────────────────
 
+class ConversationSummary(BaseModel):
+    """结构化会话摘要（需求 1, 5）"""
+    summary_text: str
+    key_entities: list[str] = Field(default_factory=list)
+    unresolved_issues: list[str] = Field(default_factory=list)
+    generated_at: float = Field(default_factory=time.time)
+
+    @classmethod
+    def empty(cls) -> "ConversationSummary":
+        """返回空摘要（反序列化失败时的降级值）"""
+        return cls(summary_text="", key_entities=[], unresolved_issues=[], generated_at=0.0)
+
+
+class UserProfile(BaseModel):
+    """用户画像模型（需求 2）"""
+    user_id: str
+    preferred_language: str = "zh"
+    communication_style: CommunicationStyle = CommunicationStyle.CASUAL
+    frequent_topics: list[str] = Field(default_factory=list)
+    satisfaction_history: list[float] = Field(default_factory=list)
+    interaction_count: int = 0
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+
+    @classmethod
+    def default(cls, user_id: str) -> "UserProfile":
+        """首次对话时的默认画像"""
+        return cls(user_id=user_id)
+
+
 class AgentEvent(BaseModel):
     """Agent execution event, pushed to frontend via SSE (Requirement 15.1, 15.3)"""
     type: str = "agent_event"
@@ -71,6 +107,11 @@ class MessageMetadata(BaseModel):
     response_time_ms: Optional[int] = None
     trace_id: Optional[str] = None
     agent_events: list[AgentEvent] = Field(default_factory=list)
+    # 新增：推荐相关（需求 3）
+    recommended_knowledge_ids: list[str] = Field(default_factory=list)
+    # 新增：澄清相关（需求 4）
+    clarification_triggered: bool = False
+    clarification_round: int = 0
 
 
 class Message(BaseModel):
@@ -89,6 +130,12 @@ class SessionContext(BaseModel):
     extracted_entities: dict[str, str] = Field(default_factory=dict)
     escalation_reason: Optional[str] = None
     ticket_id: Optional[str] = None
+    # 新增：摘要相关（需求 1）
+    conversation_summary: Optional[ConversationSummary] = None
+    # 新增：澄清相关（需求 4）
+    pending_clarification: bool = False
+    clarification_round: int = 0
+    original_ambiguous_message: Optional[str] = None
 
 
 class Session(BaseModel):

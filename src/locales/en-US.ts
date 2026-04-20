@@ -118,6 +118,16 @@ const enUS: Record<string, string> = {
   'export.button': 'Export',
   'export.pdf': 'Export as PDF',
   'export.json': 'Export as JSON',
+
+  // ── Sidebar ──
+  'sidebar.title': 'Conversations',
+  'sidebar.empty': 'No conversations yet',
+  'sidebar.newChat': 'New Chat',
+  'sidebar.loading': 'Loading...',
+  'sidebar.msgCount': '{count} messages',
+  'sidebar.today': 'Today',
+  'sidebar.yesterday': 'Yesterday',
+  'sidebar.earlier': 'Earlier',
 };
 
 export default enUS;

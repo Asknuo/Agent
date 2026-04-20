@@ -76,6 +76,20 @@ class AppConfig(BaseModel):
     rag_content_field: str = "content"
     rag_title_field: str = "title"
 
+    # ── 长会话摘要（需求 1）────────────────────────────
+    summary_threshold: int = Field(default=20, ge=5)
+    summary_recent_count: int = Field(default=8, ge=2)
+
+    # ── 用户画像（需求 2）─────────────────────────────
+    profile_load_timeout: int = Field(default=3, ge=1)
+
+    # ── 主动推荐（需求 3）─────────────────────────────
+    recommendation_enabled: bool = True
+    recommendation_timeout: int = Field(default=2, ge=1)
+
+    # ── 多轮澄清（需求 4）─────────────────────────────
+    clarification_confidence_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -125,10 +139,16 @@ _ENV_MAPPING: dict[str, str] = {
     "RAG_RESPONSE_PATH": "rag_response_path",
     "RAG_CONTENT_FIELD": "rag_content_field",
     "RAG_TITLE_FIELD": "rag_title_field",
+    "SUMMARY_THRESHOLD": "summary_threshold",
+    "SUMMARY_RECENT_COUNT": "summary_recent_count",
+    "PROFILE_LOAD_TIMEOUT": "profile_load_timeout",
+    "RECOMMENDATION_ENABLED": "recommendation_enabled",
+    "RECOMMENDATION_TIMEOUT": "recommendation_timeout",
+    "CLARIFICATION_CONFIDENCE_THRESHOLD": "clarification_confidence_threshold",
 }
 
 # Fields that need special type coercion from env string values
-_BOOL_FIELDS = {"auth_enabled", "rate_limit_enabled", "db_readonly"}
+_BOOL_FIELDS = {"auth_enabled", "rate_limit_enabled", "db_readonly", "recommendation_enabled"}
 _INT_FIELDS = {
     "rate_limit_rpm", "cache_ttl", "cache_max_size",
     "max_concurrent_requests", "request_timeout", "max_queue_size",
@@ -136,8 +156,10 @@ _INT_FIELDS = {
     "embedding_batch_size", "embedding_batch_delay_ms",
     "circuit_breaker_threshold", "circuit_breaker_recovery_s",
     "retry_max_attempts",
+    "summary_threshold", "summary_recent_count",
+    "profile_load_timeout", "recommendation_timeout",
 }
-_FLOAT_FIELDS = {"retry_base_delay"}
+_FLOAT_FIELDS = {"retry_base_delay", "clarification_confidence_threshold"}
 _LIST_FIELDS = {"db_allowed_tables"}
 
 

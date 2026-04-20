@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { sendMessageStream, rateSession, fetchMetrics, loginApi, registerApi, setToken, clearAuth, getToken, ChatMetadata, MetricEntry, AgentEvent } from './api';
+import { sendMessageStream, rateSession, fetchMetrics, loginApi, registerApi, setToken, clearAuth, getToken, ChatMetadata, MetricEntry, AgentEvent, fetchSessions, fetchSessionDetail, SessionSummary } from './api';
 import ReactMarkdown from 'react-markdown';
 import { Tag, Rate, Tooltip, Dropdown, ConfigProvider, theme as antdTheme } from 'antd';
 import {
   SendOutlined, ReloadOutlined, ClockCircleOutlined, ToolOutlined,
   DashboardOutlined, LogoutOutlined, UserOutlined, LockOutlined,
   ExclamationCircleOutlined, DownloadOutlined, FilePdfOutlined, FileTextOutlined,
-  SearchOutlined, CloseOutlined,
+  SearchOutlined, CloseOutlined, MessageOutlined, PlusOutlined, MenuOutlined,
 } from '@ant-design/icons';
 import { ThemeProvider, useTheme } from './ThemeProvider';
 import { I18nProvider, useI18n } from './I18nProvider';
@@ -455,6 +455,9 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
   const [rated, setRated] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -486,6 +489,47 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
   useEffect(() => {
     saveSessionToStorage(sessionId, messages);
   }, [messages, sessionId]);
+
+  // Load session list
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const list = await fetchSessions();
+      setSessions(list);
+    } catch { /* ignore */ }
+    setSessionsLoading(false);
+  }, []);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  // Reload session list when a new session is created or messages change
+  useEffect(() => {
+    if (sessionId && messages.length > 0 && !loading) {
+      loadSessions();
+    }
+  }, [sessionId, loading, loadSessions, messages.length]);
+
+  const handleLoadSession = async (sid: string) => {
+    if (sid === sessionId) return;
+    try {
+      const detail = await fetchSessionDetail(sid);
+      if (!detail || !detail.messages) return;
+      const loaded: ChatMessage[] = detail.messages
+        .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+        .map((m: any) => ({
+          id: m.id || crypto.randomUUID(),
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          timestamp: (m.timestamp || 0) * 1000,
+          status: 'sent' as const,
+          metadata: m.metadata,
+        }));
+      setMessages(loaded);
+      setSessionId(sid);
+      setRated(!!detail.satisfaction);
+      saveSessionToStorage(sid, loaded);
+    } catch { /* ignore */ }
+  };
 
   const doSend = async (text: string, retryMsgId?: string) => {
     if (!text || loading) return;
@@ -572,6 +616,7 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
   const handleReset = () => {
     setMessages([]); setSessionId(undefined); setRated(false);
     clearSessionStorage();
+    loadSessions();
   };
 
   const showRating = !loading && !rated && sessionId && messages.filter(m => m.role === 'user').length >= 2;
@@ -594,6 +639,31 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
     return <>{parts}</>;
   };
 
+  // Helper: format session time for grouping
+  const getSessionGroup = (ts: number): string => {
+    const now = new Date();
+    const d = new Date(ts * 1000);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+    if (d >= today) return t('sidebar.today');
+    if (d >= yesterday) return t('sidebar.yesterday');
+    return t('sidebar.earlier');
+  };
+
+  // Helper: get preview text from session
+  const getSessionPreview = (s: SessionSummary): string => {
+    const userMsg = s.messages?.find((m: any) => m.role === 'user');
+    if (userMsg) return userMsg.content.slice(0, 40) + (userMsg.content.length > 40 ? '...' : '');
+    return '...';
+  };
+
+  // Group sessions by date
+  const groupedSessions = sessions.reduce<Record<string, SessionSummary[]>>((acc, s) => {
+    const group = getSessionGroup(s.updated_at);
+    (acc[group] = acc[group] || []).push(s);
+    return acc;
+  }, {});
+
   return (
     <>
       <div className="app-bg">
@@ -601,7 +671,46 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
         <div className="bg-orb bg-orb-2" />
         <div className="bg-orb bg-orb-3" />
 
-        <div className="chat-container">
+        <div className="chat-layout">
+          {/* Sidebar */}
+          <div className={`chat-sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+            <div className="sidebar-header">
+              <span className="sidebar-title">{t('sidebar.title')}</span>
+              <button className="sidebar-new-btn" onClick={handleReset} aria-label={t('sidebar.newChat')}>
+                <PlusOutlined />
+              </button>
+            </div>
+            <div className="sidebar-list chat-scroll">
+              {sessionsLoading && sessions.length === 0 ? (
+                <div className="sidebar-empty">{t('sidebar.loading')}</div>
+              ) : sessions.length === 0 ? (
+                <div className="sidebar-empty">{t('sidebar.empty')}</div>
+              ) : (
+                Object.entries(groupedSessions).map(([group, items]) => (
+                  <div key={group} className="sidebar-group">
+                    <div className="sidebar-group-label">{group}</div>
+                    {items.map(s => (
+                      <button
+                        key={s.id}
+                        className={`sidebar-item ${s.id === sessionId ? 'sidebar-item-active' : ''}`}
+                        onClick={() => handleLoadSession(s.id)}
+                      >
+                        <MessageOutlined className="sidebar-item-icon" />
+                        <div className="sidebar-item-content">
+                          <div className="sidebar-item-preview">{getSessionPreview(s)}</div>
+                          <div className="sidebar-item-meta">
+                            {t('sidebar.msgCount', { count: String(s.messages?.length || 0) })}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="chat-container">
           {/* Header */}
           <div className="chat-header">
             <div className="header-left">
@@ -623,6 +732,13 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
               </div>
             </div>
             <div className="header-actions">
+              <button
+                className="header-btn"
+                onClick={() => setSidebarOpen(v => !v)}
+                aria-label="Toggle sidebar"
+              >
+                <MenuOutlined />
+              </button>
               <ThemeToggleButton />
               <button
                 className="header-btn"
@@ -907,6 +1023,9 @@ function ChatPage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) 
             </div>
           </div>
         </div>
+        {/* end chat-container */}
+        </div>
+        {/* end chat-layout */}
       </div>
 
       {showMetrics && <MetricsPanel onClose={() => setShowMetrics(false)} />}

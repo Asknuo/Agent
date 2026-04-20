@@ -32,7 +32,7 @@ from server.middleware.tracing import TraceMiddleware, get_metrics_response
 from server.middleware.tenant import TenantMiddleware
 from server.agent.engine import (
     process_message, get_session, get_all_sessions, rate_session,
-    set_session_store,
+    set_session_store, get_session_store,
 )
 from server.data.knowledge_base import get_all_knowledge, init_rag
 from server.data.database import init_db
@@ -225,7 +225,11 @@ async def chat_stream(req: ChatRequest, request: Request):
 
 
 @app.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(request: Request):
+    user_id = getattr(request.state, "user_id", None)
+    if user_id:
+        store = get_session_store()
+        return await store.list_by_user(user_id)
     return await get_all_sessions()
 
 
