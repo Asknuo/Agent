@@ -121,36 +121,36 @@
     - 测试文件: `server/tests/test_recommendation_properties.py`
     - **验证: 需求 3.4**
 
-- [ ] 7. 检查点 — 确保功能模块测试通过
+- [x] 7. 检查点 — 确保功能模块测试通过
   - 确保所有测试通过，如有问题请询问用户。
 
-- [ ] 8. 实现多轮澄清机制
-  - [ ] 8.1 创建 `server/agent/clarification.py`
+- [-] 8. 实现多轮澄清机制
+  - [x] 8.1 创建 `server/agent/clarification.py`
     - 实现 `ClarificationDetector` 类，包含 `should_clarify(confidence, session_context)`、`generate_clarification(intent, user_text)`、`should_escalate_to_human(session_context)` 方法
     - 定义 `CLARIFICATION_TEMPLATES` 意图到澄清选项模板映射
     - 置信度 < 阈值且轮次 < 2 时触发澄清；轮次 ≥ 2 时触发转人工
     - 模板缺失时生成通用澄清问题
     - _需求: 4.1, 4.2, 4.3, 4.6_
 
-  - [ ]* 8.2 编写属性测试：澄清路由决策正确性
+  - [x] 8.2 编写属性测试：澄清路由决策正确性
     - **Property 7: 澄清路由决策正确性**
     - 使用 Hypothesis 生成随机置信度、轮次、阈值，验证路由决策符合三条规则
     - 测试文件: `server/tests/test_clarification_properties.py`
     - **验证: 需求 4.1, 4.6**
 
-  - [ ]* 8.3 编写属性测试：澄清问题选项生成
+  - [x] 8.3 编写属性测试：澄清问题选项生成
     - **Property 8: 澄清问题选项生成**
     - 验证有模板映射的意图生成的澄清问题包含所有模板选项文本，且以编号列表呈现
     - 测试文件: `server/tests/test_clarification_properties.py`
     - **验证: 需求 4.2, 4.3**
 
-  - [ ]* 8.4 编写属性测试：澄清状态一致性
+  - [x] 8.4 编写属性测试：澄清状态一致性
     - **Property 9: 澄清状态一致性**
     - 验证触发澄清后 `SessionContext.pending_clarification` 为 True、`original_ambiguous_message` 等于原始消息、`clarification_round` 递增 1，且 `MessageMetadata` 中字段一致
     - 测试文件: `server/tests/test_clarification_properties.py`
     - **验证: 需求 4.4, 4.8**
 
-  - [ ]* 8.5 编写属性测试：澄清消息合并完整性
+  - [x] 8.5 编写属性测试：澄清消息合并完整性
     - **Property 10: 澄清消息合并完整性**
     - 验证合并后的文本同时包含原始消息和澄清回复内容
     - 测试文件: `server/tests/test_clarification_properties.py`
