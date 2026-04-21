@@ -156,12 +156,12 @@
     - 测试文件: `server/tests/test_clarification_properties.py`
     - **验证: 需求 4.5**
 
-- [ ] 9. Engine 集成改造
-  - [ ] 9.1 扩展 `AgentState` 类型定义
+- [x] 9. Engine 集成改造
+  - [x] 9.1 扩展 `AgentState` 类型定义
     - 在 `server/agent/engine.py` 的 `AgentState` 中新增 `user_profile`、`conversation_summary`、`recommendations`、`needs_clarification`、`clarification_message` 字段
     - _需求: 1.3, 2.4, 3.4, 4.1_
 
-  - [ ] 9.2 实现新增 LangGraph 节点函数
+  - [x] 9.2 实现新增 LangGraph 节点函数
     - 实现 `clarification_check_node`：调用 `ClarificationDetector.should_clarify()`，更新 `SessionContext` 澄清状态
     - 实现 `clarification_route`：根据澄清/转人工/继续三种情况路由
     - 实现 `summary_check_node`：调用 `Summarizer.check_and_summarize()`，替换 `state["messages"]` 中的历史消息
@@ -170,19 +170,19 @@
     - 实现 `profile_update_node`：调用 `ProfileAnalyzer` 更新画像并持久化
     - _需求: 1.1, 1.3, 1.5, 2.2, 2.4, 2.5, 2.6, 3.1, 3.6, 4.1, 4.4, 4.5_
 
-  - [ ] 9.3 改造 `_build_graph()` 图结构
+  - [x] 9.3 改造 `_build_graph()` 图结构
     - 注册新节点：`clarification_check`、`summary_check`、`profile_load`、`recommend`、`profile_update`
     - 修改边连接：supervisor → clarification_check → (clarify→END / escalate→human_node / continue→summary_check) → profile_load → worker_node → ... → recommend → worker_done → reviewer → profile_update → END
     - 修改 `process_message()` 中的历史消息构建逻辑，移除硬编码的 `[-18:]` 截取
     - 在 `process_message()` 中初始化新增 `AgentState` 字段
     - _需求: 1.1, 1.3, 2.4, 3.4, 4.1, 4.5_
 
-  - [ ] 9.4 集成澄清后重新分类逻辑
+  - [x] 9.4 集成澄清后重新分类逻辑
     - 在 `supervisor_node` 中检测 `pending_clarification` 状态，合并原始消息与澄清回复后重新分类
     - 澄清成功后清除 `pending_clarification` 状态
     - _需求: 4.5_
 
-  - [ ]* 9.5 编写单元测试：Engine 集成关键路径
+  - [x] 9.5 编写单元测试：Engine 集成关键路径
     - 测试摘要存储到 SessionContext（需求 1.4）
     - 测试 LLM 失败回退到 18 条（需求 1.5）
     - 测试首次对话使用默认画像（需求 2.5）
@@ -192,7 +192,7 @@
     - 测试文件: `server/tests/test_engine_intelligence.py`
     - _需求: 1.4, 1.5, 2.5, 2.6, 3.5, 3.7_
 
-- [ ] 10. 最终检查点 — 确保所有测试通过
+- [x] 10. 最终检查点 — 确保所有测试通过
   - 确保所有测试通过，如有问题请询问用户。
 
 ## 备注

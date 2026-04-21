@@ -36,8 +36,8 @@ from server.resilience.circuit_breaker import CircuitBreaker, CircuitOpenError
 from server.core.config import get_config
 from server.core.logging_config import session_id_var, user_id_var, trace_id_var
 from server.core.models import (
-    Message, MessageMetadata, Session,
-    Sentiment, IntentCategory, SessionStatus,
+    KnowledgeEntry, Message, MessageMetadata, Session,
+    Sentiment, IntentCategory, SessionStatus, UserProfile,
 )
 from server.resilience.retry import RetryEngine, RetryExhaustedError
 from server.data.session_store import SessionStore
@@ -314,6 +314,16 @@ class AgentState(TypedDict):
     agent_reply: str
     final_reply: str
     should_escalate: bool
+    user_profile: UserProfile | None
+    conversation_summary: str | None
+    recommendations: list[KnowledgeEntry]
+    needs_clarification: bool
+    clarification_message: str | None
+    # 内部传递字段（跨节点共享上下文）
+    _session_id: str
+    _user_id: str
+    _clarification_round: int
+    _original_ambiguous_message: str | None
 
 
 # ── Node 1: Supervisor ───────────────────────────────
@@ -331,6 +341,16 @@ async def supervisor_node(state: AgentState) -> dict[str, Any]:
         if isinstance(msg, HumanMessage):
             user_text = str(msg.content)
             break
+
+    # 澄清后重新分类（需求 4.5）：合并原始消息与澄清回复
+    original_ambiguous = state.get("_original_ambiguous_message")
+    if original_ambiguous and user_text:
+        from server.agent.clarification import merge_clarification_messages
+        user_text = merge_clarification_messages(original_ambiguous, user_text)
+        logger.info("clarification_merge", extra={"extra_fields": {
+            "original": original_ambiguous[:50],
+            "merged_length": len(user_text),
+        }})
 
     language = _detect_language(user_text)
 
@@ -613,15 +633,355 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
     }
 
 
+# ── 新增智能化节点 ────────────────────────────────────
+
+_summarizer: Any = None
+_clarification_detector: Any = None
+_recommendation_engine: Any = None
+_profile_store: Any = None
+
+
+def _get_summarizer():
+    global _summarizer
+    if _summarizer is None:
+        from server.agent.summarizer import Summarizer
+        cfg = get_config()
+        llm = _make_llm(temperature=0.0, max_tokens=1024)
+        _summarizer = Summarizer(llm=llm, config=cfg)
+    return _summarizer
+
+
+def _get_clarification_detector():
+    global _clarification_detector
+    if _clarification_detector is None:
+        from server.agent.clarification import ClarificationDetector
+        cfg = get_config()
+        _clarification_detector = ClarificationDetector(config=cfg)
+    return _clarification_detector
+
+
+def _get_recommendation_engine():
+    global _recommendation_engine
+    if _recommendation_engine is None:
+        from server.agent.recommendation import RecommendationEngine
+        cfg = get_config()
+        _recommendation_engine = RecommendationEngine(config=cfg)
+    return _recommendation_engine
+
+
+def _get_profile_store():
+    global _profile_store
+    if _profile_store is None:
+        from server.data.profile_store import ProfileStore
+        cfg = get_config()
+        _profile_store = ProfileStore(db_url=cfg.session_db_url)
+    return _profile_store
+
+
+def set_profile_store(store: Any) -> None:
+    """Called by main.py lifespan to inject the initialised store."""
+    global _profile_store
+    _profile_store = store
+
+
+@timed_node("clarification_check")
+async def clarification_check_node(state: AgentState) -> dict[str, Any]:
+    """
+    澄清检查节点（需求 4.1, 4.4）。
+
+    调用 ClarificationDetector 判断是否需要澄清，
+    更新 SessionContext 澄清状态。
+    """
+    node_start = time.time()
+    logger.info("node_enter", extra={"extra_fields": {"node": "clarification_check", "event": "enter"}})
+
+    confidence = state.get("confidence", 1.0)
+    detector = _get_clarification_detector()
+
+    # 构建临时 SessionContext 用于检测
+    from server.core.models import SessionContext
+    ctx = SessionContext(
+        pending_clarification=False,
+        clarification_round=state.get("_clarification_round", 0),
+    )
+
+    needs_clarification = False
+    clarification_message = None
+    should_escalate = state.get("should_escalate", False)
+
+    if confidence < detector._threshold:
+        if detector.should_escalate_to_human(ctx):
+            # 连续 2 轮澄清失败 → 转人工（需求 4.6）
+            should_escalate = True
+            logger.info("clarification_escalate", extra={"extra_fields": {
+                "round": ctx.clarification_round,
+            }})
+        elif detector.should_clarify(confidence, ctx):
+            # 触发澄清（需求 4.1）
+            intent = state.get("intent", IntentCategory.GENERAL_CHAT)
+            user_text = state.get("user_text", "")
+            clarification_message = detector.generate_clarification(intent, user_text)
+            needs_clarification = True
+            logger.info("clarification_triggered", extra={"extra_fields": {
+                "confidence": confidence,
+                "intent": intent.value,
+                "round": ctx.clarification_round,
+            }})
+
+    duration_ms = int((time.time() - node_start) * 1000)
+    logger.info("node_exit", extra={"extra_fields": {
+        "node": "clarification_check", "event": "exit", "duration_ms": duration_ms,
+        "needs_clarification": needs_clarification,
+    }})
+
+    return {
+        "needs_clarification": needs_clarification,
+        "clarification_message": clarification_message,
+        "should_escalate": should_escalate,
+    }
+
+
+def clarification_route(state: AgentState) -> Literal["clarify", "escalate", "continue"]:
+    """
+    澄清路由（需求 4.1, 4.6）。
+
+    - needs_clarification → "clarify" (返回澄清问题，END)
+    - should_escalate → "escalate" (转人工)
+    - 否则 → "continue" (继续正常流程)
+    """
+    if state.get("needs_clarification"):
+        return "clarify"
+    if state.get("should_escalate"):
+        return "escalate"
+    return "continue"
+
+
+def clarify_node(state: AgentState) -> dict[str, Any]:
+    """返回澄清问题作为最终回复（需求 4.2, 4.4）。"""
+    msg = state.get("clarification_message", "抱歉，我不太确定您的意思，能否再详细描述一下？")
+    return {
+        "final_reply": msg,
+        "messages": [AIMessage(content=msg)],
+    }
+
+
+@timed_node("summary_check")
+async def summary_check_node(state: AgentState) -> dict[str, Any]:
+    """
+    摘要检查节点（需求 1.1, 1.3, 1.5）。
+
+    调用 Summarizer.check_and_summarize() 替换 state["messages"]
+    中的历史消息。
+    """
+    node_start = time.time()
+    logger.info("node_enter", extra={"extra_fields": {"node": "summary_check", "event": "enter"}})
+
+    summarizer = _get_summarizer()
+
+    # 从 state 中获取 session 信息来构建临时 Session 对象
+    # 注意：实际 session 在 process_message 中管理，这里通过 state 传递
+    session_id = state.get("_session_id", "")
+    if session_id:
+        session = await get_session(session_id)
+        if session and len(session.messages) > 0:
+            try:
+                compressed_messages = await summarizer.check_and_summarize(session)
+                summary_text = None
+                if session.context.conversation_summary:
+                    summary_text = session.context.conversation_summary.summary_text
+
+                duration_ms = int((time.time() - node_start) * 1000)
+                logger.info("node_exit", extra={"extra_fields": {
+                    "node": "summary_check", "event": "exit", "duration_ms": duration_ms,
+                    "summarized": summary_text is not None,
+                }})
+
+                return {
+                    "messages": compressed_messages,
+                    "conversation_summary": summary_text,
+                }
+            except Exception as e:
+                logger.warning("summary_check_failed", exc_info=e)
+
+    duration_ms = int((time.time() - node_start) * 1000)
+    logger.info("node_exit", extra={"extra_fields": {
+        "node": "summary_check", "event": "exit", "duration_ms": duration_ms,
+        "summarized": False,
+    }})
+    return {}
+
+
+@timed_node("profile_load")
+async def profile_load_node(state: AgentState) -> dict[str, Any]:
+    """
+    画像加载节点（需求 2.4, 2.5, 2.6）。
+
+    调用 ProfileStore.load() 加载画像（3 秒超时降级），
+    注入画像 Prompt 到 Worker 消息。
+    """
+    import asyncio
+    node_start = time.time()
+    logger.info("node_enter", extra={"extra_fields": {"node": "profile_load", "event": "enter"}})
+
+    cfg = get_config()
+    store = _get_profile_store()
+    user_id = state.get("_user_id", "anonymous")
+
+    profile = None
+    try:
+        profile = await asyncio.wait_for(
+            store.load(user_id),
+            timeout=cfg.profile_load_timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("profile_load_timeout", extra={"extra_fields": {
+            "user_id": user_id, "timeout_s": cfg.profile_load_timeout,
+        }})
+    except Exception as e:
+        logger.warning("profile_load_failed", exc_info=e)
+
+    # 首次对话使用默认画像（需求 2.5）
+    if profile is None:
+        profile = UserProfile.default(user_id)
+
+    # 注入画像 Prompt 到消息（需求 2.4）
+    from server.agent.profile_analyzer import build_profile_prompt_segment
+    profile_prompt = build_profile_prompt_segment(profile)
+    profile_msg = SystemMessage(content=profile_prompt)
+
+    duration_ms = int((time.time() - node_start) * 1000)
+    logger.info("node_exit", extra={"extra_fields": {
+        "node": "profile_load", "event": "exit", "duration_ms": duration_ms,
+        "user_id": user_id,
+        "style": profile.communication_style.value if hasattr(profile.communication_style, 'value') else str(profile.communication_style),
+    }})
+
+    return {
+        "user_profile": profile,
+        "messages": [profile_msg],
+    }
+
+
+@timed_node("recommend")
+async def recommendation_node(state: AgentState) -> dict[str, Any]:
+    """
+    推荐节点（需求 3.1, 3.6）。
+
+    调用 RecommendationEngine.get_recommendations()，
+    记录推荐 ID 到 metadata。
+    """
+    node_start = time.time()
+    logger.info("node_enter", extra={"extra_fields": {"node": "recommend", "event": "enter"}})
+
+    engine = _get_recommendation_engine()
+    intent = state.get("intent", IntentCategory.GENERAL_CHAT)
+
+    # 从 state 获取主查询结果（knowledge_refs 中的条目）
+    from server.core.models import SessionContext
+    ctx = SessionContext()
+
+    recommendations: list[KnowledgeEntry] = []
+    try:
+        recommendations = await engine.get_recommendations(
+            intent=intent,
+            main_results=[],  # 主查询结果在 tool_node 中处理，这里传空
+            session_context=ctx,
+        )
+    except Exception as e:
+        logger.error("recommendation_failed", exc_info=e)
+
+    duration_ms = int((time.time() - node_start) * 1000)
+    logger.info("node_exit", extra={"extra_fields": {
+        "node": "recommend", "event": "exit", "duration_ms": duration_ms,
+        "count": len(recommendations),
+    }})
+
+    return {
+        "recommendations": recommendations,
+    }
+
+
+@timed_node("profile_update")
+async def profile_update_node(state: AgentState) -> dict[str, Any]:
+    """
+    画像更新节点（需求 2.2）。
+
+    调用 ProfileAnalyzer 更新画像并持久化。
+    """
+    node_start = time.time()
+    logger.info("node_enter", extra={"extra_fields": {"node": "profile_update", "event": "enter"}})
+
+    profile = state.get("user_profile")
+    if profile is None:
+        duration_ms = int((time.time() - node_start) * 1000)
+        logger.info("node_exit", extra={"extra_fields": {
+            "node": "profile_update", "event": "exit", "duration_ms": duration_ms,
+            "skipped": True,
+        }})
+        return {}
+
+    from server.agent.profile_analyzer import (
+        analyze_communication_style,
+        extract_frequent_topics,
+        update_satisfaction,
+    )
+    from server.core.models import Message
+
+    # 从 state 中提取用户消息用于分析
+    user_text = state.get("user_text", "")
+    sentiment = state.get("sentiment", Sentiment.NEUTRAL)
+    intent = state.get("intent", IntentCategory.GENERAL_CHAT)
+
+    # 构建 Message 对象用于分析
+    user_messages = [Message(role="user", content=user_text)] if user_text else []
+
+    try:
+        # 更新沟通风格
+        style = analyze_communication_style(user_messages)
+        profile.communication_style = style
+
+        # 更新高频主题
+        topics = extract_frequent_topics(user_messages, intent)
+        # 合并已有主题
+        existing = set(profile.frequent_topics)
+        for t in topics:
+            if t not in existing:
+                profile.frequent_topics.append(t)
+                existing.add(t)
+
+        # 更新满意度
+        profile.satisfaction_history = update_satisfaction(profile, sentiment)
+
+        # 递增交互次数
+        profile.interaction_count += 1
+        profile.updated_at = time.time()
+
+        # 持久化（失败不阻塞）
+        store = _get_profile_store()
+        await store.save(profile)
+
+    except Exception as e:
+        logger.error("profile_update_failed", exc_info=e)
+
+    duration_ms = int((time.time() - node_start) * 1000)
+    logger.info("node_exit", extra={"extra_fields": {
+        "node": "profile_update", "event": "exit", "duration_ms": duration_ms,
+    }})
+
+    return {"user_profile": profile}
+
+
 # ── 构建 Graph ───────────────────────────────────────
 
 def _build_graph() -> Any:
     """
-    supervisor → worker_node ⇄ tool_node → worker_done → reviewer → END
-             ↘ human_node → END
+    supervisor → clarification_check → (clarify→END / escalate→human_node /
+    continue→summary_check) → profile_load → worker_node ⇄ tool_node →
+    recommend → worker_done → reviewer → profile_update → END
     """
     g = StateGraph(AgentState)
 
+    # 现有节点
     g.add_node("supervisor", supervisor_node)
     g.add_node("human_node", human_node)
     g.add_node("worker_node", worker_node)
@@ -629,21 +989,46 @@ def _build_graph() -> Any:
     g.add_node("worker_done", worker_done)
     g.add_node("reviewer", reviewer_node)
 
+    # 新增节点
+    g.add_node("clarification_check", clarification_check_node)
+    g.add_node("clarify", clarify_node)
+    g.add_node("summary_check", summary_check_node)
+    g.add_node("profile_load", profile_load_node)
+    g.add_node("recommend", recommendation_node)
+    g.add_node("profile_update", profile_update_node)
+
     g.set_entry_point("supervisor")
 
-    g.add_conditional_edges("supervisor", supervisor_route, {
-        "human_node": "human_node",
-        "worker_node": "worker_node",
+    # Supervisor → 澄清检查
+    g.add_edge("supervisor", "clarification_check")
+
+    # 澄清检查 → 路由
+    g.add_conditional_edges("clarification_check", clarification_route, {
+        "clarify": "clarify",
+        "escalate": "human_node",
+        "continue": "summary_check",
     })
+    g.add_edge("clarify", END)
     g.add_edge("human_node", END)
 
+    # 摘要检查 → 画像加载
+    g.add_edge("summary_check", "profile_load")
+
+    # 画像加载 → Worker
+    g.add_edge("profile_load", "worker_node")
+
+    # Worker 工具循环
     g.add_conditional_edges("worker_node", worker_should_tool, {
         "tool_node": "tool_node",
-        "worker_done": "worker_done",
+        "worker_done": "recommend",  # Worker 完成后先推荐
     })
     g.add_edge("tool_node", "worker_node")
+
+    # 推荐 → Worker Done → Reviewer → 画像更新 → END
+    g.add_edge("recommend", "worker_done")
     g.add_edge("worker_done", "reviewer")
-    g.add_edge("reviewer", END)
+    g.add_edge("reviewer", "profile_update")
+    g.add_edge("profile_update", END)
 
     return g.compile()
 
@@ -720,12 +1105,17 @@ async def process_message(
     }})
 
     history: list[BaseMessage] = []
-    for m in session.messages[-18:]:
+    for m in session.messages:
         if m.role == "user":
             history.append(HumanMessage(content=m.content))
         elif m.role == "assistant":
             history.append(AIMessage(content=m.content))
     history.append(HumanMessage(content=user_message))
+
+    # 获取当前澄清轮次（用于澄清检查节点）
+    clarification_round = session.context.clarification_round
+    # 如果处于澄清等待状态，传递原始模糊消息（需求 4.5）
+    original_ambiguous = session.context.original_ambiguous_message if session.context.pending_clarification else None
 
     try:
         result = await _get_graph().ainvoke({
@@ -740,6 +1130,17 @@ async def process_message(
             "agent_reply": "",
             "final_reply": "",
             "should_escalate": False,
+            # 新增字段
+            "user_profile": None,
+            "conversation_summary": None,
+            "recommendations": [],
+            "needs_clarification": False,
+            "clarification_message": None,
+            # 内部传递字段
+            "_session_id": session_id,
+            "_user_id": user_id,
+            "_clarification_round": clarification_round,
+            "_original_ambiguous_message": original_ambiguous,
         })
 
         reply = result.get("final_reply") or result.get("agent_reply") or "抱歉，暂时无法回复。"
@@ -750,6 +1151,13 @@ async def process_message(
         tools_used = result.get("tools_used", [])
         knowledge_refs = result.get("knowledge_refs", [])
         should_escalate = result.get("should_escalate", False)
+        recommendations = result.get("recommendations", [])
+        needs_clarification = result.get("needs_clarification", False)
+
+        # 推荐内容格式化（需求 3.4）
+        if recommendations and not needs_clarification:
+            from server.agent.recommendation import format_recommendations
+            reply = format_recommendations(reply, recommendations)
 
     except Exception as e:
         logger.error("agent_execution_failed", exc_info=e, extra={"extra_fields": {
@@ -760,6 +1168,7 @@ async def process_message(
         language = _detect_language(user_message)
         reply = _get_fallback_reply(intent, sentiment)
         tools_used, knowledge_refs, should_escalate = [], [], False
+        recommendations, needs_clarification = [], False
 
     # Build AgentEvent model instances from collected raw dicts
     from server.core.models import AgentEvent as AgentEventModel
@@ -775,6 +1184,9 @@ async def process_message(
         response_time_ms=int((time.time() - start) * 1000),
         trace_id=trace_id_var.get(""),
         agent_events=agent_event_models,
+        recommended_knowledge_ids=[r.id for r in recommendations] if recommendations else [],
+        clarification_triggered=needs_clarification,
+        clarification_round=session.context.clarification_round,
     )
     user_msg = Message(
         role="user", content=user_message,
@@ -789,6 +1201,17 @@ async def process_message(
     session.context.user_name = session.context.user_name or user_id
     if confidence > 0.3:
         session.context.current_intent = intent
+
+    # 更新澄清状态（需求 4.4）
+    if needs_clarification:
+        session.context.pending_clarification = True
+        session.context.original_ambiguous_message = user_message
+        session.context.clarification_round += 1
+    elif session.context.pending_clarification:
+        # 澄清成功，清除状态
+        session.context.pending_clarification = False
+        session.context.original_ambiguous_message = None
+
     if should_escalate:
         session.status = SessionStatus.ESCALATED
     session.updated_at = time.time()
